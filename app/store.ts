@@ -3,12 +3,13 @@
 // changed outside (an agent editing them), unless the editor has unsaved changes.
 import { cleanup, computed, effect, signal } from "nsh";
 import type { EditorRef } from "nsh/base";
-import { api, apiError, type ApiError, type EnvView, type RequestRef, type Run } from "./api";
+import { Callme } from "callme/native";
+import { api, apiError, project, type ApiError, type EnvView, type RequestRef, type Run } from "./api";
 
 export type RunState = { running: boolean; run?: Run; events: unknown[]; status?: string; error?: ApiError };
 
-export const requests = signal<RequestRef[]>(api.list());
-export const files = signal<string[]>(api.files());
+export const requests = signal<RequestRef[]>(project() ? api.list() : []);
+export const files = signal<string[]>(project() ? api.files() : []);
 export const tabs = signal<string[]>([]);
 export const activeFile = signal("");
 export const text = signal("");
@@ -25,6 +26,7 @@ export const editor: { ref?: EditorRef; response?: EditorRef } = {};
 const saved = new Map<string, { text: string; mtime: number }>();
 
 function safeEnvView(): EnvView {
+  if (!project()) return { envs: [], vars: [], current: null, env: null };
   try {
     return api.envView();
   } catch (e) {
@@ -57,8 +59,37 @@ export const currentRun = computed<RunState | null>(() => {
 });
 
 export function refresh() {
-  requests.set(api.list());
-  files.set(api.files());
+  requests.set(project() ? api.list() : []);
+  files.set(project() ? api.files() : []);
+}
+
+/** Opens the project in folder `path`: its requests, its environments, its first request. */
+export function openProject(path: string) {
+  saveNow();
+  project.set(path);
+  Callme.remember(path);
+  saved.clear();
+  tabs.set([]);
+  activeFile.set("");
+  text.set("");
+  cursorLine.set(0);
+  runs.set({});
+  recent.set([]);
+  view.set("request");
+  refresh();
+  reloadEnv();
+  const first = requests()[0];
+  if (first) selectRequest(first);
+}
+
+/** Asks for a folder and opens it as the project. */
+export async function pickProject() {
+  try {
+    const path = await Callme.pickFolder();
+    if (path) openProject(path);
+  } catch (e) {
+    notice.set(apiError(e).message);
+  }
 }
 
 export function openFile(file: string, line?: number) {

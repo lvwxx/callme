@@ -96,6 +96,11 @@ enum Cmd {
     Help { topic: Option<String> },
     /// 以 stdio 方式启动 MCP server
     Mcp,
+    /// 在 callme 桌面版里打开项目（默认当前目录）
+    Open {
+        /// 项目目录
+        dir: Option<PathBuf>,
+    },
 }
 
 fn main() -> ExitCode {
@@ -224,6 +229,33 @@ fn dispatch(cmd: Cmd, project: &Project, json: bool) -> Result<u8, Error> {
                 }
             }
             Ok(0)
+        }
+        Cmd::Open { dir } => {
+            let start = match dir {
+                Some(d) => std::fs::canonicalize(&d).map_err(|e| Error::Io(d.display().to_string(), e))?,
+                None => project.root.clone(),
+            };
+            let root = Project::discover(&start).root;
+            let home = std::env::var_os("HOME").map(PathBuf::from).ok_or_else(|| Error::Usage("没有 HOME 环境变量".into()))?;
+            let file = home.join(".callme").join("last-project");
+            std::fs::create_dir_all(file.parent().unwrap()).map_err(|e| Error::Io(file.display().to_string(), e))?;
+            std::fs::write(&file, root.display().to_string()).map_err(|e| Error::Io(file.display().to_string(), e))?;
+            // By bundle id, else by name (an app LaunchServices has not registered yet).
+            let launch = |args: &[&str]| {
+                std::process::Command::new("open").args(args).stderr(std::process::Stdio::null()).status().is_ok_and(|s| s.success())
+            };
+            match launch(&["-b", "dev.callme.app"]) || launch(&["-a", "callme"]) {
+                true => {
+                    if !json {
+                        eprintln!("已在 callme 里打开 {}", root.display());
+                    }
+                    Ok(0)
+                }
+                false => Err(Error::Usage(format!(
+                    "没有找到 callme 桌面版（把 callme.app 放进「应用程序」文件夹）。已记下项目 {}，打开 app 就是它",
+                    root.display()
+                ))),
+            }
         }
         Cmd::Mcp => {
             mcp::serve(project);

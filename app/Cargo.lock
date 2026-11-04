@@ -973,6 +973,7 @@ dependencies = [
 [[package]]
 name = "nsh-base"
 version = "0.4.0"
+source = "git+https://github.com/longbridge/nsh?rev=43026fb27c937fbd5178d401156bd13744550a7c#43026fb27c937fbd5178d401156bd13744550a7c"
 dependencies = [
  "chrono",
  "html5ever",
@@ -995,6 +996,7 @@ dependencies = [
 [[package]]
 name = "nsh-core"
 version = "0.4.0"
+source = "git+https://github.com/longbridge/nsh?rev=43026fb27c937fbd5178d401156bd13744550a7c#43026fb27c937fbd5178d401156bd13744550a7c"
 dependencies = [
  "cap-std",
  "crc32fast",
@@ -1026,6 +1028,7 @@ dependencies = [
 [[package]]
 name = "nsh-macros"
 version = "0.4.0"
+source = "git+https://github.com/longbridge/nsh?rev=43026fb27c937fbd5178d401156bd13744550a7c#43026fb27c937fbd5178d401156bd13744550a7c"
 dependencies = [
  "imagesize",
  "proc-macro2",

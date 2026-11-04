@@ -18,6 +18,7 @@ use nsh_base::editor::{
     register_highlighter, register_language, EditorHighlighter, EditorLanguage, EditorText, EditorTextEdit, EditorToken,
     EditorTokens,
 };
+use nsh_core::file_dialog::OpenDialog;
 use nsh_core::prelude::*;
 use serde_json::{json, Value};
 
@@ -110,6 +111,16 @@ impl Watcher for Forward {
     }
 }
 
+fn last_project_file() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".callme").join("last-project"))
+}
+
+fn last_project() -> Option<PathBuf> {
+    let text = std::fs::read_to_string(last_project_file()?).ok()?;
+    let path = text.trim();
+    (!path.is_empty()).then(|| PathBuf::from(path))
+}
+
 fn err(e: callme_core::Error) -> String {
     e.to_json().to_string()
 }
@@ -121,11 +132,33 @@ pub struct Callme;
 
 #[module]
 impl Callme {
-    /// The project's root: `$CALLME_PROJECT`, else the working directory, looking upward for
-    /// `http-client.env.json` or `.callme/`.
+    /// The project to open: `$CALLME_PROJECT`, else the one opened last (`~/.callme/last-project`, which
+    /// `callme open` writes too), else the working directory unless it is `/` (an app opened from the Finder);
+    /// looking upward for `http-client.env.json` or `.callme/`. Empty when there is none.
     pub fn root() -> String {
-        let start = std::env::var_os("CALLME_PROJECT").map(PathBuf::from).unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
-        Project::discover(&start).root.display().to_string()
+        let from_env = std::env::var_os("CALLME_PROJECT").map(PathBuf::from);
+        let last = last_project().filter(|p| p.is_dir());
+        let cwd = std::env::current_dir().ok().filter(|d| d.parent().is_some());
+        match from_env.or(last).or(cwd) {
+            Some(start) => Project::discover(&start).root.display().to_string(),
+            None => String::new(),
+        }
+    }
+
+    /// Remembers `root` as the project to open next time.
+    pub fn remember(root: String) {
+        if let Some(file) = last_project_file() {
+            if let Some(dir) = file.parent() {
+                let _ = std::fs::create_dir_all(dir);
+            }
+            let _ = std::fs::write(file, root);
+        }
+    }
+
+    /// Asks for a folder to open; resolves with its path, or null when cancelled.
+    pub async fn pick_folder() -> Result<Option<String>, String> {
+        let picked = pick_paths(OpenDialog::folders().title("打开项目文件夹").button_label("打开")).await?;
+        Ok(picked.and_then(|p| p.into_iter().next()).map(|p| p.display().to_string()))
     }
 
     /// Every request in the project, as JSON.

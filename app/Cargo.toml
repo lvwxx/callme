@@ -7,8 +7,9 @@ publish = false
 [workspace]
 
 [dependencies]
-nsh-core = { path = "/Users/biao/.nsh/source/crates/nsh-core" }
-nsh-base = { path = "/Users/biao/.nsh/source/crates/nsh-base" }
+# nsh from its repository at the revision the `nsh` CLI is built from (the editor is not in a release yet).
+nsh-core = { git = "https://github.com/longbridge/nsh", rev = "43026fb27c937fbd5178d401156bd13744550a7c" }
+nsh-base = { git = "https://github.com/longbridge/nsh", rev = "43026fb27c937fbd5178d401156bd13744550a7c" }
 callme-core = { path = "../crates/core" }
 serde_json = "1"
 tokio = { version = "1", default-features = false, features = ["sync"] }

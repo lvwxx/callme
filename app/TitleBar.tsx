@@ -1,13 +1,13 @@
 // The window's title bar, drawn by the app: the project, the command palette's entry, the environment.
 import { Text, View } from "nsh";
 import { isAvailable as hasWindow, Menu, titleBar } from "nsh/desktop";
-import { root } from "./api";
+import { project } from "./api";
 import { Icon } from "./icons";
 import { env, envState, paletteOpen, setEnv } from "./store";
 import { Kbd } from "./ui";
 
-const name = root.split("/").filter(Boolean).pop() ?? root;
-const home = root.replace(/^\/Users\/[^/]+/, "~");
+const name = () => project().split("/").filter(Boolean).pop() ?? project();
+const home = () => project().replace(/^\/Users\/[^/]+/, "~");
 
 export function TitleBar() {
   const pickEnv = () => {
@@ -27,8 +27,8 @@ export function TitleBar() {
       <View class="h-5 w-5 items-center justify-center rounded bg-brand">
         <Text class="text-xs font-extrabold text-[#0a0e19]">c</Text>
       </View>
-      <Text class="text-[13px] font-semibold text-foreground">{name}</Text>
-      <Text class="text-xs text-muted-foreground" style={{ numberOfLines: 1 }}>{home}</Text>
+      <Text class="text-[13px] font-semibold text-foreground">{project() ? name() : "callme"}</Text>
+      <Text class="text-xs text-muted-foreground" style={{ numberOfLines: 1 }}>{home()}</Text>
       <View class="flex-1 items-center">
         <View
           role="button"

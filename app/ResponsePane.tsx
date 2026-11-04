@@ -14,6 +14,13 @@ const picked = signal<Run | null>(null);
 
 const shown = computed<Run | null>(() => picked() ?? currentRun()?.run ?? null);
 
+/** A record's time in the local time zone: `2026-11-04 18:18:49`. */
+function localTime(at: string): string {
+  const d = new Date(at);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
 function bodyText(run: Run | null): string {
   if (!run) return "";
   const b = run.response.body;
@@ -55,7 +62,7 @@ function Summary() {
             <Text class="font-mono text-xs text-foreground">{`${r().timing.total} ms`}</Text>
             <Text class="font-mono text-xs text-foreground">{size(r().response.size)}</Text>
             <Text class="flex-1 text-right text-xs text-muted-foreground" style={{ numberOfLines: 1 }}>
-              {picked() ? `历史 · ${r().at.slice(11, 19)}` : state()?.status ?? ""}
+              {picked() ? `历史 · ${localTime(r().at).slice(11)}` : state()?.status ?? ""}
             </Text>
             <IconButton
               icon="copy"
@@ -221,7 +228,7 @@ function HistoryTab() {
             <Status status={h().response.status} />
             <Text class="w-[64px] font-mono text-xs text-foreground">{`${h().timing.total} ms`}</Text>
             <Text class="flex-1 font-mono text-xs text-muted-foreground">{h().request.env ?? "-"}</Text>
-            <Text class="font-mono text-xs text-muted-foreground">{h().at.replace("T", " ").slice(0, 19)}</Text>
+            <Text class="font-mono text-xs text-muted-foreground">{localTime(h().at)}</Text>
           </View>
         )}
       </Each>

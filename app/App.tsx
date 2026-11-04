@@ -2,7 +2,7 @@
 // panes (or the environment view), a status bar, and the command palette over them.
 import { computed, effect, keymap, mount, Text, View } from "nsh";
 import { isAvailable as hasWindow, Menu, Window } from "nsh/desktop";
-import { root } from "./api";
+import { project } from "./api";
 import { EnvPane } from "./EnvPane";
 import { Palette } from "./Palette";
 import { RequestPane } from "./RequestPane";
@@ -11,6 +11,7 @@ import { Sidebar } from "./Sidebar";
 import {
   activeFile,
   checkExternalChanges,
+  pickProject,
   copyCurl,
   currentIndex,
   currentRequest,
@@ -37,6 +38,8 @@ if (hasWindow) {
     {
       label: "请求",
       submenu: [
+        { label: "打开文件夹…", shortcut: "mod+o", onSelect: pickProject },
+        { type: "separator" },
         { label: "发送", shortcut: "mod+enter", onSelect: () => send() },
         { label: "复制为 curl", shortcut: "mod+shift+c", onSelect: copyCurl },
         { label: "保存", shortcut: "mod+s", onSelect: saveNow },
@@ -66,13 +69,29 @@ if (first) selectRequest(first);
 
 function StatusBar() {
   const left = computed(() =>
-    view() === "env" ? "环境变量" : activeFile() ? `${activeFile()} · 第 ${currentIndex() || "-"} 个请求` : root,
+    view() === "env" ? "环境变量" : activeFile() ? `${activeFile()} · 第 ${currentIndex() || "-"} 个请求` : project(),
   );
   return (
     <View class="h-[26px] flex-row items-center gap-4 border-t border-border bg-title-bar px-3">
       <Text class="text-[11px] text-muted-foreground">{left()}</Text>
       <Text class="flex-1 text-[11px] text-brand" style={{ numberOfLines: 1 }}>{notice() ?? ""}</Text>
       <Text class="text-[11px] text-muted-foreground">{`环境 ${env() ?? "未选择"} · ${envState().vars.length} 个变量`}</Text>
+    </View>
+  );
+}
+
+function Welcome() {
+  return (
+    <View class="flex-1 items-center justify-center gap-4 bg-background">
+      <View class="h-12 w-12 items-center justify-center rounded-xl bg-brand">
+        <Text class="text-2xl font-extrabold text-[#0a0e19]">c</Text>
+      </View>
+      <Text class="text-lg font-semibold text-foreground">callme</Text>
+      <Text class="text-[13px] text-muted-foreground">打开一个放 .http 文件的文件夹，它就是一个项目</Text>
+      <View role="button" accessibilityLabel="打开文件夹" onPress={pickProject} class="h-8 justify-center rounded-md bg-button px-4 active:opacity-80">
+        <Text class="text-[13px] font-semibold text-button-foreground">打开文件夹…</Text>
+      </View>
+      <Text class="font-mono text-xs text-muted-foreground">或者在终端里：callme open .</Text>
     </View>
   );
 }
@@ -86,12 +105,14 @@ function App() {
   return (
     <View class="flex-1 bg-background">
       <TitleBar />
-      <View class="min-h-0 flex-1 flex-row">
-        <Sidebar />
-        <If when={view() === "env"} else={<><RequestPane /><ResponsePane /></>}>
-          <EnvPane />
-        </If>
-      </View>
+      <If when={project()} else={<Welcome />}>
+        <View class="min-h-0 flex-1 flex-row">
+          <Sidebar />
+          <If when={view() === "env"} else={<><RequestPane /><ResponsePane /></>}>
+            <EnvPane />
+          </If>
+        </View>
+      </If>
       <StatusBar />
       <Palette />
     </View>
