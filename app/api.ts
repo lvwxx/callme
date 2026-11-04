@@ -68,6 +68,11 @@ export const api = {
     }
   },
   files: (): string[] => JSON.parse(Callme.files(root())),
+  create: (file: string) => Callme.create(root(), file),
+  rename: (from: string, to: string) => Callme.rename(root(), from, to),
+  trash: (file: string) => Callme.trash(root(), file),
+  reveal: (file: string) => Callme.reveal(root(), file),
+  addEnv: (name: string, like?: string | null) => Callme.addEnv(root(), name, like ? like : null),
   read: (file: string) => Callme.read(root(), file),
   write: (file: string, text: string) => Callme.write(root(), file, text),
   modified: (file: string) => Callme.modified(root(), file),
@@ -75,6 +80,7 @@ export const api = {
   jsonFolds: (text: string): Fold[] => JSON.parse(Callme.jsonFolds(text)),
   variables: (text: string): Span[] => JSON.parse(Callme.variables(text)),
   requestAt: (text: string, line: number) => Callme.requestAt(text, line),
+  requestLine: (text: string, index: number) => Callme.requestLine(text, index),
   diagnostics: (file: string, text: string, env?: string | null): Diagnostic[] => JSON.parse(Callme.diagnostics(root(), file, text, opt(env))),
   completions: (file: string, text: string, line: number, column: number, env?: string | null): CompletionItem[] =>
     JSON.parse(Callme.completions(root(), file, text, line, column, opt(env))),

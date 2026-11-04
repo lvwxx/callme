@@ -3,7 +3,7 @@ import { Text, View } from "nsh";
 import { isAvailable as hasWindow, Menu, titleBar } from "nsh/desktop";
 import { project } from "./api";
 import { Icon } from "./icons";
-import { env, envState, paletteOpen, setEnv } from "./store";
+import { creatingEnv, env, envState, envTab, paletteOpen, saveNow, setEnv, view } from "./store";
 import { Kbd } from "./ui";
 
 const name = () => project().split("/").filter(Boolean).pop() ?? project();
@@ -12,11 +12,20 @@ const home = () => project().replace(/^\/Users\/[^/]+/, "~");
 export function TitleBar() {
   const pickEnv = () => {
     const envs = envState().envs;
-    Menu.popup(
-      envs.length
+    const newEnv = () => {
+      saveNow();
+      envTab.set("public");
+      view.set("env");
+      creatingEnv.set(true);
+    };
+    Menu.popup([
+      ...(envs.length
         ? envs.map((e) => ({ label: e, checked: e === env(), onSelect: () => setEnv(e) }))
-        : [{ label: "没有环境：在项目根目录创建 http-client.env.json", disabled: true }],
-    );
+        : [{ label: "还没有环境", disabled: true }]),
+      { type: "separator" as const },
+      { label: "新建环境…", onSelect: newEnv },
+      { label: "编辑环境变量", onSelect: () => (saveNow(), view.set("env")) },
+    ]);
   };
   return (
     <View

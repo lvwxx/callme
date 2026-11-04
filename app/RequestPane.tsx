@@ -14,9 +14,12 @@ import {
   cursorLine,
   editor,
   env,
+  naming,
+  newRequest,
   openFile,
   send,
   setText,
+  settledText,
   tabs,
   text,
 } from "./store";
@@ -24,7 +27,7 @@ import { Button } from "./ui";
 
 const hover = signal<{ data: Hover | null; anchor: Bounds; messages: string[] } | null>(null);
 
-const diagnostics = computed(() => (activeFile() ? api.diagnostics(activeFile(), text(), env()) : []));
+const diagnostics = computed(() => (activeFile() ? api.diagnostics(activeFile(), settledText(), env()) : []));
 
 const editorDiagnostics = computed<EditorDiagnostic[]>(() =>
   diagnostics().map((d) => ({
@@ -54,7 +57,7 @@ const decorations = computed<EditorDecoration[]>(() => {
   return out;
 });
 
-const preview = computed(() => (activeFile() && currentIndex() ? api.preview(activeFile(), text(), currentIndex(), env()) : null));
+const preview = computed(() => (activeFile() && currentIndex() ? api.preview(activeFile(), settledText(), currentIndex(), env()) : null));
 
 function RequestBar() {
   const p = () => preview();
@@ -66,6 +69,7 @@ function RequestBar() {
         <Text class="text-[13px] font-semibold text-foreground">{currentRequest()?.name ?? `#${currentIndex()}`}</Text>
         <Text class="flex-1 font-mono text-xs text-muted-foreground" style={{ numberOfLines: 1 }}>{(p() as { url: string }).url}</Text>
       </If>
+      <Button label="新建请求" hint="⌘N" onPress={newRequest} />
       <Button label="复制为 curl" onPress={copyCurl} />
       <Button label={running() ? "发送中" : "发送"} hint="⌘↵" primary disabled={running() || !currentIndex()} onPress={send} />
     </View>
@@ -202,7 +206,8 @@ function Empty() {
   return (
     <View class="flex-1 items-center justify-center gap-2">
       <Text class="text-sm text-muted-foreground">在左侧选择一个请求</Text>
-      <Text class="text-xs text-muted-foreground">或者按 ⌘K 粘贴一段 curl 新建请求</Text>
+      <Button label="新建请求文件" hint="⌘⇧N" onPress={() => naming.set({ kind: "create" })} />
+      <Text class="text-xs text-muted-foreground">或者按 ⌘K 粘贴一段 curl</Text>
     </View>
   );
 }

@@ -1,7 +1,7 @@
 // The app's state and what changes it: the open files, the current request (the one the caret is in), the
 // environment, runs and their streamed events. Files save themselves half a second after an edit and reload when
 // changed outside (an agent editing them), unless the editor has unsaved changes.
-import { cleanup, computed, effect, signal } from "nsh";
+import { cleanup, computed, effect, signal, untracked } from "nsh";
 import type { EditorRef } from "nsh/base";
 import { Callme } from "callme/native";
 import { api, apiError, project, type ApiError, type EnvView, type RequestRef, type Run } from "./api";
@@ -35,6 +35,21 @@ function safeEnvView(): EnvView {
 }
 
 export const env = computed(() => envState().current ?? null);
+
+/** `source`'s value once it has stayed the same for `ms` (work that is too slow for every keystroke). */
+export function settled<T>(source: () => T, ms = 250) {
+  const value = signal(untracked(source));
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  effect(() => {
+    const next = source();
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => value.set(next), ms);
+  });
+  return value;
+}
+
+/** The text once typing paused. */
+export const settledText = settled(() => text());
 
 /** The 1-based index of the request the caret is in. */
 export const currentIndex = computed(() => (text() ? api.requestAt(text(), cursorLine()) : 0));
@@ -82,6 +97,67 @@ export function openProject(path: string) {
   if (first) selectRequest(first);
 }
 
+/** Which name is being typed in the sidebar: a new file, or a new name for a file. */
+export const naming = signal<{ kind: "create" } | { kind: "rename"; file: string } | null>(null);
+
+/** Whether the environment view is asking for a new environment's name. */
+export const creatingEnv = signal(false);
+
+export function createFile(name: string) {
+  try {
+    const file = api.create(name);
+    naming.set(null);
+    refresh();
+    openFile(file);
+  } catch (e) {
+    notice.set(apiError(e).message);
+  }
+}
+
+export function renameFile(from: string, to: string) {
+  try {
+    saveNow();
+    const file = api.rename(from, to);
+    naming.set(null);
+    saved.delete(from);
+    tabs.set(tabs().map((f) => (f === from ? file : f)));
+    if (activeFile() === from) {
+      activeFile.set(file);
+      saved.set(file, { text: text(), mtime: api.modified(file) });
+    }
+    refresh();
+  } catch (e) {
+    notice.set(apiError(e).message);
+  }
+}
+
+export async function trashFile(file: string) {
+  try {
+    if (activeFile() === file) saveNow();
+    await api.trash(file);
+    if (tabs().includes(file)) closeTab(file);
+    saved.delete(file);
+    refresh();
+    notice.set(`已把 ${file} 移到废纸篓`);
+  } catch (e) {
+    notice.set(apiError(e).message);
+  }
+}
+
+/** Adds environment `name` with the current environment's variable names, and switches to it. */
+export function addEnv(name: string): boolean {
+  try {
+    api.addEnv(name, env());
+    creatingEnv.set(false);
+    reloadEnv();
+    notice.set(`已新建环境 ${name.trim()}，在 http-client.env.json 里填上变量的值`);
+    return true;
+  } catch (e) {
+    notice.set(apiError(e).message);
+    return false;
+  }
+}
+
 /** Asks for a folder and opens it as the project. */
 export async function pickProject() {
   try {
@@ -100,6 +176,7 @@ export function openFile(file: string, line?: number) {
     saved.set(file, { text: t, mtime: api.modified(file) });
     activeFile.set(file);
     text.set(t);
+    settledText.set(t);
     cursorLine.set(0);
   }
   view.set("request");
@@ -123,15 +200,7 @@ export function closeTab(file: string) {
 /** Opens request `r` with the caret on its request line. */
 export function selectRequest(r: RequestRef) {
   openFile(r.file);
-  const lines = text().split("\n");
-  // Its request line: the first line of its block that is not blank, a comment or a separator.
-  const line = Math.max(
-    0,
-    lines.findIndex((l, i) => {
-      const t = l.trim();
-      return t && !t.startsWith("#") && !t.startsWith("//") && api.requestAt(text(), i) === r.index;
-    }),
-  );
+  const line = api.requestLine(text(), r.index);
   cursorLine.set(line);
   setTimeout(() => editor.ref?.goToLine(line), 0);
 }
@@ -217,6 +286,27 @@ export async function send() {
 }
 
 export const recent = signal<{ file: string; id: string; method: string; status: number; at: string }[]>([]);
+
+/** Adds a request at the end of the active file (a new file when none is open) and puts the caret on it. */
+export function newRequest() {
+  if (!project()) return;
+  if (!activeFile()) {
+    naming.set({ kind: "create" });
+    return;
+  }
+  const body = text().replace(/\s*$/, "");
+  const names = new Set(requests().filter((r) => r.file === activeFile()).map((r) => r.name));
+  let name = "request";
+  for (let i = 2; names.has(name); i++) name = `request${i}`;
+  const block = `### 新请求\n# @name ${name}\nGET {{baseUrl}}/\nAccept: application/json\n`;
+  const next = body ? `${body}\n\n${block}` : block;
+  setText(next);
+  saveNow();
+  const line = next.split("\n").length - 3;
+  cursorLine.set(line);
+  setTimeout(() => editor.ref?.setSelections([{ anchor: { line, column: 21 }, head: { line, column: 21 } }]), 0);
+  setTimeout(() => editor.ref?.focus(), 0);
+}
 
 /** Copies the current request as a curl command. */
 export function copyCurl() {

@@ -11,6 +11,8 @@ import { Sidebar } from "./Sidebar";
 import {
   activeFile,
   checkExternalChanges,
+  naming,
+  newRequest,
   pickProject,
   copyCurl,
   currentIndex,
@@ -38,6 +40,8 @@ if (hasWindow) {
     {
       label: "请求",
       submenu: [
+        { label: "新建请求", shortcut: "mod+n", onSelect: newRequest },
+        { label: "新建请求文件…", shortcut: "mod+shift+n", onSelect: () => naming.set({ kind: "create" }) },
         { label: "打开文件夹…", shortcut: "mod+o", onSelect: pickProject },
         { type: "separator" },
         { label: "发送", shortcut: "mod+enter", onSelect: () => send() },
@@ -57,6 +61,8 @@ keymap.bind(
   {
     "mod+enter": () => send(),
     "mod+k": () => paletteOpen.set(!paletteOpen()),
+    "mod+n": () => newRequest(),
+    "mod+shift+n": () => naming.set({ kind: "create" }),
   },
   { when: "always" },
 );

@@ -1,10 +1,11 @@
 // The environment view: the two environment files edited as text, and the variables an environment ends up with,
 // with where each comes from (secrets masked). Read-only on the right: the files are the source.
 import { computed, signal, Text, View, Scroll } from "nsh";
-import { Editor } from "nsh/base";
+import { Editor, Input } from "nsh/base";
 import { api } from "./api";
 import { Icon } from "./icons";
-import { env, envState, envTab, reloadEnv } from "./store";
+import { addEnv, creatingEnv, env, envState, envTab, reloadEnv } from "./store";
+import { Button } from "./ui";
 import { Tabs } from "./ui";
 
 const FILES = { public: "http-client.env.json", private: "http-client.private.env.json" } as const;
@@ -69,9 +70,19 @@ export function EnvPane() {
         </View>
         <View class="h-11 flex-row items-center gap-2.5 border-b border-border px-3">
           <Text class="text-[13px] font-semibold text-foreground">环境变量</Text>
-          <Text class="flex-1 text-xs text-muted-foreground" style={{ numberOfLines: 1 }}>
-            每个顶层键是一个环境，$shared 里的变量所有环境都能用；同名时 私有 &gt; 环境 &gt; $shared
-          </Text>
+          <If
+            when={creatingEnv()}
+            else={
+              <>
+                <Text class="flex-1 text-xs text-muted-foreground" style={{ numberOfLines: 1 }}>
+                  每个顶层键是一个环境，$shared 里的变量所有环境都能用；同名时 私有 &gt; 环境 &gt; $shared
+                </Text>
+                <Button label="新建环境" onPress={() => creatingEnv.set(true)} />
+              </>
+            }
+          >
+            <NewEnv />
+          </If>
         </View>
         <Editor
           value={value() || (envTab() === "public" ? TEMPLATE : '{\n  "dev": {}\n}\n')}
@@ -122,6 +133,45 @@ export function EnvPane() {
           <Text class="text-[11px] text-muted-foreground">请确认 .gitignore 里有 http-client.private.env.json。</Text>
         </View>
       </View>
+    </View>
+  );
+}
+
+function NewEnv() {
+  const name = signal("");
+  let submitted = false;
+  const submit = () => {
+    if (submitted) return;
+    submitted = true;
+    if (!name().trim()) return creatingEnv.set(false);
+    if (!addEnv(name())) {
+      submitted = false;
+      return;
+    }
+    {
+      envTab.set("public");
+      // The file changed under the editor: read it again.
+      texts.set({ ...texts(), [FILES.public]: read(FILES.public) });
+      preview.set(null);
+    }
+  };
+  return (
+    <View class="flex-1 flex-row items-center gap-2">
+      <View class="h-7 flex-1 justify-center rounded-md border border-brand bg-background px-2">
+        <Input
+          value={name()}
+          onChange={({ value }) => name.set(value)}
+          onSubmit={submit}
+          submitBehavior="submit"
+          onKeyPress={({ key }) => (key === "Enter" ? submit() : key === "Escape" ? creatingEnv.set(false) : undefined)}
+          autoFocus
+          testID="new-env-input"
+          placeholder={env() ? `新环境的名字，变量名从 ${env()} 复制过来` : "新环境的名字，如 staging"}
+          class="font-mono text-xs text-foreground placeholder:text-muted-foreground"
+        />
+      </View>
+      <Button label="创建" primary onPress={submit} />
+      <Button label="取消" onPress={() => creatingEnv.set(false)} />
     </View>
   );
 }

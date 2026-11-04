@@ -1,6 +1,6 @@
 // The response pane: status, time and size; the body (JSON folded by its structure, filtered by JSONPath),
 // server-sent events as they arrive, headers, the time of each phase, and the request's history.
-import { computed, Scroll, signal, Text, token, View } from "nsh";
+import { computed, Scroll, signal, Text, View } from "nsh";
 import { Editor, Input } from "nsh/base";
 import { api, type Run } from "./api";
 import { IconButton, Status, Tabs, size } from "./ui";
@@ -93,8 +93,7 @@ function Body() {
             value={query()}
             onChange={({ value }) => query.set(value)}
             placeholder="$.user.roles"
-            class="flex-1 font-mono text-xs text-foreground"
-            style={{ placeholderColor: token("muted-foreground" as never) as string }}
+            class="flex-1 font-mono text-xs text-foreground placeholder:text-muted-foreground"
           />
         </View>
         <Fold label="全部折叠" onPress={() => editor.response?.run("foldAll")} />

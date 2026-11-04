@@ -1,12 +1,15 @@
 // The command palette (⌘K): requests and commands by what is typed (`>` commands only, `@` requests only), and a
 // pasted curl command or fetch(…) call turned into a request, with the environment's variables in place of its values.
-import { computed, keymap, Overlay, Scroll, signal, Text, token, View } from "nsh";
+import { computed, keymap, Overlay, Scroll, signal, Text, View } from "nsh";
 import { Input } from "nsh/base";
 import { api } from "./api";
 import { Icon } from "./icons";
 import {
   activeFile,
   copyCurl,
+  creatingEnv,
+  naming,
+  newRequest,
   env,
   envState,
   envTab,
@@ -113,6 +116,14 @@ const items = computed<Item[]>(() => {
   if (!onlyRequests) {
     const commands: Item[] = [
       { key: "send", section: "命令", label: "发送当前请求", shortcut: "⌘↵", run: () => (close(), send()) },
+      { key: "new", section: "命令", label: "新建请求", shortcut: "⌘N", run: () => (close(), newRequest()) },
+      { key: "newfile", section: "命令", label: "新建请求文件", shortcut: "⌘⇧N", run: () => (close(), naming.set({ kind: "create" })) },
+      {
+        key: "newenv",
+        section: "命令",
+        label: "新建环境",
+        run: () => (close(), saveNow(), envTab.set("public"), view.set("env"), creatingEnv.set(true)),
+      },
       { key: "curl", section: "命令", label: "复制当前请求为 curl", shortcut: "⌘⇧C", run: () => (copyCurl(), close()) },
       { key: "env", section: "命令", label: "打开环境变量", run: () => (envTab.set("public"), view.set("env"), close()) },
       ...envState()
@@ -152,8 +163,7 @@ export function Palette() {
             testID="palette-input"
             multiline={!!imported()}
             placeholder="搜索请求和命令，> 只搜命令，@ 只搜请求；也可以粘贴 curl"
-            class="flex-1 font-mono text-[13px] text-foreground"
-            style={{ placeholderColor: token("muted-foreground" as never) as string }}
+            class="flex-1 font-mono text-[13px] text-foreground placeholder:text-muted-foreground"
           />
         </View>
         <If when={imported()}>

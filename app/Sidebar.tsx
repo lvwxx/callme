@@ -1,9 +1,27 @@
 // The sidebar: the environment files, the project's requests by folder and file, the recent runs.
 import { computed, Scroll, signal, Text, View } from "nsh";
+import { Input } from "nsh/base";
+import { Menu } from "nsh/desktop";
+import { api } from "./api";
 import type { RequestRef } from "./api";
 import { Icon } from "./icons";
-import { activeFile, currentIndex, envTab, files, openFile, recent, requests, saveNow, selectRequest, view } from "./store";
-import { Method, SectionLabel, Status } from "./ui";
+import {
+  activeFile,
+  createFile,
+  currentIndex,
+  envTab,
+  files,
+  naming,
+  openFile,
+  recent,
+  renameFile,
+  requests,
+  saveNow,
+  selectRequest,
+  trashFile,
+  view,
+} from "./store";
+import { IconButton, Method, SectionLabel, Status } from "./ui";
 
 type Row =
   | { kind: "folder"; key: string; label: string; depth: number; open: boolean }
@@ -62,9 +80,13 @@ export function Sidebar() {
         {envFile("http-client.env.json", "public")}
         {envFile("http-client.private.env.json", "private")}
       </View>
-      <View class="h-8 flex-row items-center px-3.5">
+      <View class="h-8 flex-row items-center pl-3.5 pr-1.5">
         <Text class="flex-1 text-[11px] font-semibold text-muted-foreground">请求</Text>
+        <IconButton icon="plus" label="新建请求文件" onPress={() => naming.set({ kind: "create" })} />
       </View>
+      <If when={naming()?.kind === "create"}>
+        <NameInput initial="" placeholder="文件名，如 users/list" onDone={(name) => (name ? createFile(name) : naming.set(null))} />
+      </If>
       <Scroll class="flex-1 px-1.5">
         <If when={rows().length === 0}>
           <Text class="px-2 text-xs text-muted-foreground">项目里还没有 .http 文件。用 ⌘K 粘贴一段 curl 来新建一个。</Text>
@@ -90,10 +112,20 @@ export function Sidebar() {
                 </View>
               );
             }
+            const renaming = () => {
+              const n = naming();
+              return r.kind === "file" && n?.kind === "rename" && n.file === r.file;
+            };
+            const file = r.kind === "file" ? r.file : "";
             return (
+              <If
+                when={!renaming()}
+                else={<NameInput initial={file} placeholder="新的文件名" onDone={(name) => (name && name !== file ? renameFile(file, name) : naming.set(null))} />}
+              >
               <View
                 role="button"
                 accessibilityLabel={r.label}
+                onContextMenu={(e) => r.kind === "file" && fileMenu(r.file, e.pagePosition)}
                 onPress={() => (r.kind === "file" ? (openFile(r.file), r.open || toggle(r.key)) : toggle(r.key))}
                 class="h-7 flex-row items-center gap-1.5 rounded-md pr-2 hover:bg-list-hover"
                 style={{ paddingLeft: r.kind === "folder" ? pad : pad - 14 }}
@@ -104,6 +136,7 @@ export function Sidebar() {
                 <Icon name={r.kind === "folder" ? "folder" : "file"} />
                 <Text class="flex-1 text-[13px] text-foreground" style={{ numberOfLines: 1 }}>{r.label}</Text>
               </View>
+              </If>
             );
           }}
         </Each>
@@ -122,6 +155,46 @@ export function Sidebar() {
           </Each>
         </View>
       </If>
+    </View>
+  );
+}
+
+function fileMenu(file: string, at: { x: number; y: number }) {
+  Menu.popup(
+    [
+      { label: "重命名…", onSelect: () => naming.set({ kind: "rename", file }) },
+      { label: "在 Finder 中显示", onSelect: () => void api.reveal(file).catch(() => {}) },
+      { type: "separator" },
+      { label: "移到废纸篓", onSelect: () => void trashFile(file) },
+    ],
+    at,
+  );
+}
+
+/** A name typed in place: Return keeps it, Escape or leaving the field drops it. */
+function NameInput(props: { initial: string; placeholder: string; onDone: (name: string | null) => void }) {
+  const value = signal(props.initial);
+  let done = false;
+  const finish = (name: string | null) => {
+    if (done) return;
+    done = true;
+    props.onDone(name);
+  };
+  return (
+    <View class="mx-1.5 h-7 justify-center rounded-md border border-brand bg-background px-2">
+      <Input
+        value={value()}
+        onChange={({ value: v }) => value.set(v)}
+        onSubmit={() => finish(value().trim() || null)}
+        submitBehavior="submit"
+        // Return blurs before it submits on some platforms: let the submit come first.
+        onBlur={() => setTimeout(() => finish(null), 100)}
+        onKeyPress={({ key }) => (key === "Enter" ? finish(value().trim() || null) : key === "Escape" ? finish(null) : undefined)}
+        autoFocus
+        testID="name-input"
+        placeholder={props.placeholder}
+        class="font-mono text-xs text-foreground placeholder:text-muted-foreground"
+      />
     </View>
   );
 }

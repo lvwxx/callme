@@ -121,6 +121,15 @@ fn last_project() -> Option<PathBuf> {
     (!path.is_empty()).then(|| PathBuf::from(path))
 }
 
+/// A project-relative `.http` path from what was typed: trimmed, `.http` added, no `..`.
+fn normalize_http(name: &str) -> Result<String, String> {
+    let name = name.trim().trim_start_matches('/');
+    if name.is_empty() || name.split('/').any(|p| p == ".." || p.is_empty()) {
+        return Err("文件名不对".into());
+    }
+    Ok(if name.ends_with(".http") || name.ends_with(".rest") { name.to_string() } else { format!("{name}.http") })
+}
+
 fn err(e: callme_core::Error) -> String {
     e.to_json().to_string()
 }
@@ -260,6 +269,11 @@ impl Callme {
         lang::request_at(&text, line as usize).unwrap_or(0) as u32
     }
 
+    /// The 0-based line of request `index`'s request line (its method and URL), 0 when there is none.
+    pub fn request_line(text: String, index: u32) -> u32 {
+        callme_core::parse::parse(&text).requests.iter().find(|r| r.index == index as usize).map_or(0, |r| r.request_line as u32)
+    }
+
     /// The `{{…}}` of a text, as JSON `[{ line, start, end }]` in UTF-16 columns.
     pub fn variables(text: String) -> String {
         let lines: Vec<&str> = text.split('\n').collect();
@@ -310,6 +324,69 @@ impl Callme {
         let vars = project.env_files().ok().and_then(|f| f.resolve(env.as_deref(), &[]).ok());
         let c = import::to_http(&imported, vars.as_ref(), name.as_deref());
         Ok(json!({ "text": c.text, "replaced": c.replaced }).to_string())
+    }
+
+    /// Adds environment `name` to `http-client.env.json` (created when missing), with the variable names of
+    /// environment `like` and empty values to fill in.
+    pub fn add_env(root: String, name: String, like: Option<String>) -> Result<(), String> {
+        let name = name.trim().to_string();
+        if name.is_empty() || name == "$shared" || name.contains(char::is_whitespace) {
+            return Err("环境名不能为空、不能有空格，也不能是 $shared".into());
+        }
+        let path = PathBuf::from(&root).join(callme_core::env::PUBLIC_FILE);
+        let text = std::fs::read_to_string(&path).unwrap_or_else(|_| "{}".into());
+        let mut doc: Value = serde_json::from_str(if text.trim().is_empty() { "{}" } else { &text })
+            .map_err(|e| format!("{} 不是合法的 JSON：{e}", callme_core::env::PUBLIC_FILE))?;
+        let envs = doc.as_object_mut().ok_or("http-client.env.json 的顶层应该是对象")?;
+        if envs.contains_key(&name) {
+            return Err(format!("已经有环境 `{name}` 了"));
+        }
+        let vars: serde_json::Map<String, Value> = like
+            .and_then(|l| envs.get(&l).and_then(Value::as_object).cloned())
+            .map(|m| m.keys().map(|k| (k.clone(), Value::String(String::new()))).collect())
+            .unwrap_or_default();
+        envs.insert(name.clone(), Value::Object(vars));
+        std::fs::write(&path, serde_json::to_string_pretty(&doc).unwrap() + "\n").map_err(|e| e.to_string())?;
+        run::set_current_env(&Project { root: root.into() }, &name).map_err(err)
+    }
+
+    /// Renames file `from` to `to` (both relative to the root; `.http` added when `to` has no extension).
+    pub fn rename(root: String, from: String, to: String) -> Result<String, String> {
+        let to = normalize_http(&to)?;
+        let (a, b) = (PathBuf::from(&root).join(&from), PathBuf::from(&root).join(&to));
+        if b.exists() {
+            return Err(format!("{to} 已经存在"));
+        }
+        if let Some(dir) = b.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        std::fs::rename(a, b).map_err(|e| format!("重命名失败：{e}"))?;
+        Ok(to)
+    }
+
+    /// Creates `.http` file `file` (`.http` added when it has no extension) with a request to start from;
+    /// resolves with its path.
+    pub fn create(root: String, file: String) -> Result<String, String> {
+        let file = normalize_http(&file)?;
+        let path = PathBuf::from(&root).join(&file);
+        if path.exists() {
+            return Err(format!("{file} 已经存在"));
+        }
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        std::fs::write(&path, "### 新请求\n# @name request\nGET {{baseUrl}}/\nAccept: application/json\n").map_err(|e| e.to_string())?;
+        Ok(file)
+    }
+
+    /// Moves `file` to the Trash.
+    pub async fn trash(root: String, file: String) -> Result<(), String> {
+        move_to_trash(PathBuf::from(root).join(file)).await.map(|_| ())
+    }
+
+    /// Shows `file` in the Finder.
+    pub async fn reveal(root: String, file: String) -> Result<(), String> {
+        reveal_path(PathBuf::from(root).join(file)).await
     }
 
     /// The `.http` files of the project, as JSON.
