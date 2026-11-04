@@ -12,6 +12,7 @@ pub mod parse;
 pub mod project;
 pub mod resolve;
 pub mod run;
+pub mod service;
 
 use serde::Serialize;
 

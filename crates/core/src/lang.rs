@@ -40,6 +40,27 @@ enum Section {
     Body,
 }
 
+/// The section each line of a `.http` text is in (a `###` line is in `Preamble`).
+fn sections(text: &str) -> Vec<Section> {
+    let mut out = Vec::new();
+    let mut section = Section::Preamble;
+    for line in text.split('\n') {
+        let t = line.trim();
+        if t.starts_with("###") {
+            section = Section::Preamble;
+            out.push(Section::Preamble);
+            continue;
+        }
+        out.push(section);
+        match section {
+            Section::Preamble if !t.is_empty() && comment(line).is_none() => section = Section::Headers,
+            Section::Headers if t.is_empty() => section = Section::Body,
+            _ => {}
+        }
+    }
+    out
+}
+
 /// The tokens of every line of a `.http` text.
 pub fn tokens(text: &str) -> Vec<LineTokens> {
     let mut out = Vec::new();
@@ -279,9 +300,182 @@ pub fn json_folds(text: &str) -> Vec<Fold> {
     out
 }
 
+/// The UTF-16 column of byte column `byte` of `line` (editors count UTF-16 units).
+pub fn utf16_col(line: &str, byte: usize) -> usize {
+    line[..byte.min(line.len())].encode_utf16().count()
+}
+
+/// The byte column of UTF-16 column `col` of `line`.
+pub fn byte_col(line: &str, col: usize) -> usize {
+    let mut units = 0;
+    for (i, c) in line.char_indices() {
+        if units >= col {
+            return i;
+        }
+        units += c.len_utf16();
+    }
+    line.len()
+}
+
+/// The 1-based index of the request whose block holds `line`; the nearest one before it on a blank line between
+/// requests.
+pub fn request_at(text: &str, line: usize) -> Option<usize> {
+    let f = crate::parse::parse(text);
+    f.requests
+        .iter()
+        .rev()
+        .find(|r| r.start_line <= line || r.start_line == line + 1)
+        .or_else(|| f.requests.first())
+        .map(|r| r.index)
+}
+
+/// What the caret is in, for completion.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum CompletionContext {
+    /// Inside `{{…`, `prefix` typed after `{{`.
+    Variable { prefix: String },
+    /// A header's name.
+    HeaderName,
+    /// A header's value, after `name:`.
+    HeaderValue { name: String },
+    /// The method of a request line.
+    Method,
+    /// After `# @`.
+    Directive,
+    None,
+}
+
+/// The completion context at byte column `col` of line `line`.
+pub fn completion_context(text: &str, line: usize, col: usize) -> CompletionContext {
+    let lines: Vec<&str> = text.split('\n').collect();
+    let Some(src) = lines.get(line) else { return CompletionContext::None };
+    let before = &src[..col.min(src.len())];
+    if let Some(open) = before.rfind("{{") {
+        if !before[open..].contains("}}") {
+            return CompletionContext::Variable { prefix: before[open + 2..].trim_start().to_string() };
+        }
+    }
+    let section = sections(text).get(line).copied().unwrap_or(Section::Preamble);
+    let trimmed = before.trim_start();
+    if comment(src).is_some() {
+        let body = trimmed.trim_start_matches('#').trim_start_matches("//").trim_start();
+        return if body.starts_with('@') && !body.contains(char::is_whitespace) {
+            CompletionContext::Directive
+        } else {
+            CompletionContext::None
+        };
+    }
+    match section {
+        Section::Preamble if !trimmed.contains(char::is_whitespace) && !trimmed.starts_with("###") => CompletionContext::Method,
+        Section::Headers if trimmed.starts_with('?') || trimmed.starts_with('&') => CompletionContext::None,
+        Section::Headers => match before.split_once(':') {
+            None if !trimmed.contains(char::is_whitespace) => CompletionContext::HeaderName,
+            Some((name, _)) => CompletionContext::HeaderValue { name: name.trim().to_string() },
+            None => CompletionContext::None,
+        },
+        _ => CompletionContext::None,
+    }
+}
+
+/// The `{{…}}` at byte column `col` of `line`: its expression and byte range.
+pub fn variable_at(line: &str, col: usize) -> Option<(String, Range<usize>)> {
+    let mut toks = Vec::new();
+    variables(line, 0, line.len(), &mut toks);
+    toks.into_iter()
+        .map(|(r, _)| r)
+        .find(|r| r.start <= col && col <= r.end)
+        .map(|r| (line[r.start + 2..r.end - 2].trim().to_string(), r))
+}
+
+/// Every `{{…}}` of a text: line, byte range, expression.
+pub fn all_variables(text: &str) -> Vec<(usize, Range<usize>, String)> {
+    let mut out = Vec::new();
+    for (n, line) in text.split('\n').enumerate() {
+        let mut toks = Vec::new();
+        variables(line, 0, line.len(), &mut toks);
+        for (r, _) in toks {
+            let expr = line[r.start + 2..r.end - 2].trim().to_string();
+            out.push((n, r, expr));
+        }
+    }
+    out
+}
+
+/// Common request headers and values offered for them.
+pub const HEADERS: &[(&str, &[&str])] = &[
+    ("Accept", &["application/json", "*/*", "text/event-stream", "text/html", "application/xml"]),
+    ("Accept-Encoding", &["gzip, deflate, br", "identity"]),
+    ("Accept-Language", &["zh-CN,zh;q=0.9,en;q=0.8", "en-US,en;q=0.9"]),
+    ("Authorization", &["Bearer ", "Basic "]),
+    ("Cache-Control", &["no-cache", "no-store", "max-age=0"]),
+    ("Connection", &["keep-alive", "close"]),
+    ("Content-Type", &["application/json", "application/x-www-form-urlencoded", "multipart/form-data", "text/plain", "application/xml"]),
+    ("Cookie", &[]),
+    ("If-None-Match", &[]),
+    ("If-Modified-Since", &[]),
+    ("Origin", &[]),
+    ("Referer", &[]),
+    ("User-Agent", &[]),
+    ("X-Request-Id", &["{{$uuid}}"]),
+    ("X-Forwarded-For", &[]),
+];
+
+pub const DIRECTIVES: &[(&str, &str)] = &[
+    ("name", "给请求命名"),
+    ("no-redirect", "不跟随重定向"),
+    ("no-cookie-jar", "不读写 cookie"),
+    ("timeout", "超时秒数"),
+    ("insecure", "忽略 TLS 证书错误"),
+];
+
+pub const DYNAMIC: &[(&str, &str)] = &[
+    ("$uuid", "随机 UUID"),
+    ("$timestamp", "Unix 时间戳（秒）"),
+    ("$isoTimestamp", "ISO 8601 时间"),
+    ("$randomInt", "0–999 的随机整数"),
+];
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn utf16_columns() {
+        assert_eq!(utf16_col("你好a", "你好".len()), 2);
+        assert_eq!(byte_col("你好a", 2), "你好".len());
+        assert_eq!(byte_col("ab", 9), 2);
+    }
+
+    #[test]
+    fn finds_the_request_at_a_line() {
+        let t = "### a\nGET /a\n\n### b\nGET /b\n";
+        assert_eq!(request_at(t, 1), Some(1));
+        assert_eq!(request_at(t, 2), Some(1));
+        assert_eq!(request_at(t, 3), Some(2));
+        assert_eq!(request_at(t, 4), Some(2));
+        assert_eq!(request_at("# @name x\nGET /x", 0), Some(1));
+    }
+
+    #[test]
+    fn completion_contexts() {
+        let t = "# @na\nPO\nAcc\nContent-Type: app\nX: {{base\n\n{\"a\": \"{{login.res\"}";
+        let at = |line: usize, col: usize| completion_context(t, line, col);
+        assert_eq!(at(0, 5), CompletionContext::Directive);
+        assert_eq!(at(1, 2), CompletionContext::Method);
+        assert_eq!(at(2, 3), CompletionContext::HeaderName);
+        assert_eq!(at(3, 17), CompletionContext::HeaderValue { name: "Content-Type".into() });
+        assert_eq!(at(4, 9), CompletionContext::Variable { prefix: "base".into() });
+        assert_eq!(at(6, 18), CompletionContext::Variable { prefix: "login.res".into() });
+        assert_eq!(at(6, 2), CompletionContext::None);
+    }
+
+    #[test]
+    fn variables_at_a_column() {
+        assert_eq!(variable_at("GET {{ baseUrl }}/a", 8), Some(("baseUrl".into(), 4..17)));
+        assert_eq!(variable_at("GET {{baseUrl}}/a", 1), None);
+        assert_eq!(all_variables("a\n{{x}} {{y.z}}").len(), 2);
+    }
 
     fn kinds(text: &str, line: usize) -> Vec<(String, Token)> {
         let lines: Vec<&str> = text.split('\n').collect();
