@@ -6,6 +6,7 @@ pub mod env;
 pub mod exec;
 pub mod history;
 pub mod import;
+pub mod lang;
 pub mod output;
 pub mod parse;
 pub mod project;
