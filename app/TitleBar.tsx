@@ -1,0 +1,56 @@
+// The window's title bar, drawn by the app: the project, the command palette's entry, the environment.
+import { Text, View } from "nsh";
+import { isAvailable as hasWindow, Menu, titleBar } from "nsh/desktop";
+import { root } from "./api";
+import { Icon } from "./icons";
+import { env, envState, paletteOpen, setEnv } from "./store";
+import { Kbd } from "./ui";
+
+const name = root.split("/").filter(Boolean).pop() ?? root;
+const home = root.replace(/^\/Users\/[^/]+/, "~");
+
+export function TitleBar() {
+  const pickEnv = () => {
+    const envs = envState().envs;
+    Menu.popup(
+      envs.length
+        ? envs.map((e) => ({ label: e, checked: e === env(), onSelect: () => setEnv(e) }))
+        : [{ label: "没有环境：在项目根目录创建 http-client.env.json", disabled: true }],
+    );
+  };
+  return (
+    <View
+      desktop={{ windowDrag: true }}
+      class="flex-row items-center gap-3 border-b border-title-bar-border bg-title-bar pr-3"
+      style={{ height: (hasWindow && titleBar().height) || 44, paddingLeft: (hasWindow ? titleBar().left : 0) + 12 }}
+    >
+      <View class="h-5 w-5 items-center justify-center rounded bg-brand">
+        <Text class="text-xs font-extrabold text-[#0a0e19]">c</Text>
+      </View>
+      <Text class="text-[13px] font-semibold text-foreground">{name}</Text>
+      <Text class="text-xs text-muted-foreground" style={{ numberOfLines: 1 }}>{home}</Text>
+      <View class="flex-1 items-center">
+        <View
+          role="button"
+          accessibilityLabel="命令面板"
+          onPress={() => paletteOpen.set(true)}
+          class="h-7 w-[420px] max-w-full flex-row items-center gap-2 rounded-md border border-border bg-background px-2.5"
+        >
+          <Icon name="search" />
+          <Text class="flex-1 text-[13px] text-muted-foreground">搜索请求、命令，或粘贴 curl…</Text>
+          <Kbd>⌘K</Kbd>
+        </View>
+      </View>
+      <View
+        role="button"
+        accessibilityLabel={`切换环境，当前 ${env() ?? "无"}`}
+        onPress={pickEnv}
+        class="h-7 flex-row items-center gap-1.5 rounded-md border border-border bg-background px-2.5"
+      >
+        <View class={`h-2 w-2 rounded-full ${env() ? "bg-brand" : "bg-muted-foreground"}`} />
+        <Text class="text-[13px] font-semibold text-foreground">{env() ?? "未选择环境"}</Text>
+        <Icon name="chevronDown" size={12} />
+      </View>
+    </View>
+  );
+}

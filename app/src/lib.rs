@@ -9,7 +9,10 @@ use std::time::Duration;
 use callme_core::exec::Watcher;
 use callme_core::lang::{self, Token};
 use callme_core::output;
+use callme_core::history;
+use callme_core::import;
 use callme_core::project::Project;
+use callme_core::service::{self, Service};
 use callme_core::run::{self, RunOptions, SseDecoder};
 use nsh_base::editor::{
     register_highlighter, register_language, EditorHighlighter, EditorLanguage, EditorText, EditorTextEdit, EditorToken,
@@ -27,6 +30,7 @@ static HTTP: EditorLanguage = EditorLanguage::new("HTTP")
     .line_comment("#")
     .brackets(&[('{', '}'), ('[', ']')])
     .auto_close(&[('{', '}'), ('[', ']'), ('"', '"')])
+    .word_chars("-$")
     .tab_size(2);
 
 /// The crate's UI set (`nsh.json` `"rust"`).
@@ -137,7 +141,11 @@ impl Callme {
 
     /// Writes a file's text.
     pub fn write(root: String, file: String, text: String) -> Result<(), String> {
-        std::fs::write(PathBuf::from(root).join(&file), text).map_err(|e| format!("保存 {file} 失败：{e}"))
+        let path = PathBuf::from(root).join(&file);
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        std::fs::write(path, text).map_err(|e| format!("保存 {file} 失败：{e}"))
     }
 
     /// The request folds of `.http` text, as JSON `[{ startLine, endLine }]`.
@@ -173,6 +181,116 @@ impl Callme {
             on_event.post(message);
         }
         job.await.map_err(|e| json!({ "error": { "kind": "internal", "message": e.to_string() } }).to_string())?
+    }
+
+    /// Diagnostics of `.http` text `text` (file `file`) in environment `env` (the current one when none), as JSON
+    /// `[{ line, start, end, severity, message }]` in UTF-16 columns.
+    pub fn diagnostics(root: String, file: String, text: String, env: Option<String>) -> String {
+        let project = Project { root: root.into() };
+        serde_json::to_string(&Service { project: &project, file: &file, text: &text, env }.diagnostics()).unwrap()
+    }
+
+    /// Completion items at `line`, UTF-16 `column`, as JSON `[{ label, kind, detail?, insertText? }]`.
+    pub fn completions(root: String, file: String, text: String, line: u32, column: u32, env: Option<String>) -> String {
+        let project = Project { root: root.into() };
+        let items = Service { project: &project, file: &file, text: &text, env }.completions(line as usize, column as usize);
+        serde_json::to_string(&items).unwrap()
+    }
+
+    /// What a hover over `line`, UTF-16 `column` shows, as JSON, or null over no variable.
+    pub fn hover(root: String, file: String, text: String, line: u32, column: u32, env: Option<String>) -> Option<String> {
+        let project = Project { root: root.into() };
+        let h = Service { project: &project, file: &file, text: &text, env }.hover(line as usize, column as usize)?;
+        Some(serde_json::to_string(&h).unwrap())
+    }
+
+    /// The method and URL request `index` would be sent with, as JSON `{ method, url }` (secrets masked).
+    pub fn preview(root: String, file: String, text: String, index: u32, env: Option<String>) -> Result<String, String> {
+        let project = Project { root: root.into() };
+        let (method, url) = Service { project: &project, file: &file, text: &text, env }.preview(index as usize).map_err(err)?;
+        Ok(json!({ "method": method, "url": url }).to_string())
+    }
+
+    /// Request `index` as a curl command.
+    pub fn curl(root: String, file: String, text: String, index: u32, env: Option<String>) -> Result<String, String> {
+        let project = Project { root: root.into() };
+        Service { project: &project, file: &file, text: &text, env }.curl(index as usize).map_err(err)
+    }
+
+    /// Puts `text` on the clipboard.
+    pub fn copy(text: String) {
+        set_clipboard(text);
+    }
+
+    /// The 1-based index of the request at `line` of `.http` text, 0 for none.
+    pub fn request_at(text: String, line: u32) -> u32 {
+        lang::request_at(&text, line as usize).unwrap_or(0) as u32
+    }
+
+    /// The `{{…}}` of a text, as JSON `[{ line, start, end }]` in UTF-16 columns.
+    pub fn variables(text: String) -> String {
+        let lines: Vec<&str> = text.split('\n').collect();
+        let out: Vec<Value> = lang::all_variables(&text)
+            .into_iter()
+            .map(|(line, r, _)| {
+                let src = lines[line];
+                json!({ "line": line, "start": lang::utf16_col(src, r.start), "end": lang::utf16_col(src, r.end) })
+            })
+            .collect();
+        Value::Array(out).to_string()
+    }
+
+    /// The environments and one environment's variables, as JSON `{ envs, current, env, vars: [{ name, value,
+    /// source }] }`, secrets masked.
+    pub fn env_view(root: String, env: Option<String>) -> Result<String, String> {
+        let project = Project { root: root.into() };
+        service::env_view(&project, env.as_deref()).map(|v| serde_json::to_string(&v).unwrap()).map_err(err)
+    }
+
+    /// Makes `env` the current environment.
+    pub fn set_env(root: String, env: String) -> Result<(), String> {
+        run::set_current_env(&Project { root: root.into() }, &env).map_err(err)
+    }
+
+    /// The newest `limit` runs of request `id` of `file`, as JSON, newest first.
+    pub fn history(root: String, file: String, id: String, limit: u32) -> String {
+        let project = Project { root: root.into() };
+        let items: Vec<Value> = history::list(&project, &file, &id, limit as usize)
+            .iter()
+            .map(|(p, r)| output::record_json(r, None, Some(p), MAX_BODY))
+            .collect();
+        Value::Array(items).to_string()
+    }
+
+    /// What JSONPath `path` selects in JSON `json`, as a JSON array.
+    pub fn filter(json: String, path: String) -> Result<String, String> {
+        let value: Value = serde_json::from_str(&json).map_err(|e| e.to_string())?;
+        callme_core::resolve::query_all(&value, &path).map(|v| Value::Array(v).to_string()).map_err(|e| e.to_string())
+    }
+
+    /// A curl command or `fetch(…)` call as `.http` text, with `env`'s variables in place of its values, as JSON
+    /// `{ text, replaced }`.
+    pub fn import(root: String, input: String, env: Option<String>, name: Option<String>) -> Result<String, String> {
+        let project = Project { root: root.into() };
+        let imported = import::parse_any(&input).map_err(err)?;
+        let env = env.or_else(|| run::current_env(&project));
+        let vars = project.env_files().ok().and_then(|f| f.resolve(env.as_deref(), &[]).ok());
+        let c = import::to_http(&imported, vars.as_ref(), name.as_deref());
+        Ok(json!({ "text": c.text, "replaced": c.replaced }).to_string())
+    }
+
+    /// The `.http` files of the project, as JSON.
+    pub fn files(root: String) -> String {
+        serde_json::to_string(&Project { root: root.into() }.http_files()).unwrap()
+    }
+
+    /// When `file` last changed, in milliseconds since the epoch (0 when it is missing).
+    pub fn modified(root: String, file: String) -> f64 {
+        std::fs::metadata(PathBuf::from(root).join(file))
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map_or(0.0, |d| d.as_millis() as f64)
     }
 
     /// Pretty JSON of a value given as JSON (the response body as the editor shows it).

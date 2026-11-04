@@ -1,146 +1,99 @@
-// callme GUI prototype (M0): the project's requests on the left, the selected file in an editor with callme's
-// `.http` highlighter, and the response on the right, server-sent events streamed in as they arrive.
-import { mount, signal, Scroll, Text, View } from "nsh";
-import { Editor } from "nsh/base";
-import { Callme } from "callme/native";
+// callme: a simple, AI-friendly API client for .http files. The title bar, the sidebar, the request and response
+// panes (or the environment view), a status bar, and the command palette over them.
+import { computed, effect, keymap, mount, Text, View } from "nsh";
+import { isAvailable as hasWindow, Menu, Window } from "nsh/desktop";
+import { root } from "./api";
+import { EnvPane } from "./EnvPane";
+import { Palette } from "./Palette";
+import { RequestPane } from "./RequestPane";
+import { clearPicked, ResponsePane } from "./ResponsePane";
+import { Sidebar } from "./Sidebar";
+import {
+  activeFile,
+  checkExternalChanges,
+  copyCurl,
+  currentIndex,
+  currentRequest,
+  env,
+  envState,
+  notice,
+  paletteOpen,
+  requests,
+  saveNow,
+  selectRequest,
+  send,
+  view,
+} from "./store";
+import { TitleBar } from "./TitleBar";
 
-type RequestRef = { file: string; id: string; name?: string; index: number; method: string; url: string };
-type Run = {
-  request: { method: string; url: string; env?: string };
-  response: { status: number; reason: string; httpVersion: string; headers: Record<string, string | string[]>; bodyKind: string; body: unknown; bodyTruncated: boolean; size: number };
-  timing: { dns: number; connect: number; tls: number; ttfb: number; download: number; total: number };
-};
-
-const root = Callme.root();
-
-function errorMessage(e: unknown): string {
-  const text = e instanceof Error ? e.message : String(e);
-  try {
-    const { error } = JSON.parse(text);
-    return error.hint ? `${error.message}\n${error.hint}` : error.message;
-  } catch {
-    return text;
-  }
+if (hasWindow) {
+  Window.setTitle("callme");
+  Window.setTitleBar({ style: "hidden", height: 44 });
+  Menu.setApplicationMenu([
+    {
+      label: "callme",
+      submenu: [{ role: "about" }, { type: "separator" }, { role: "hide" }, { role: "hideOthers" }, { type: "separator" }, { role: "quit" }],
+    },
+    {
+      label: "请求",
+      submenu: [
+        { label: "发送", shortcut: "mod+enter", onSelect: () => send() },
+        { label: "复制为 curl", shortcut: "mod+shift+c", onSelect: copyCurl },
+        { label: "保存", shortcut: "mod+s", onSelect: saveNow },
+        { type: "separator" },
+        { label: "命令面板…", shortcut: "mod+k", onSelect: () => paletteOpen.set(true) },
+        { label: "环境变量", shortcut: "mod+e", onSelect: () => view.set(view() === "env" ? "request" : "env") },
+      ],
+    },
+    { label: "编辑", submenu: [{ role: "undo" }, { role: "redo" }, { type: "separator" }, { role: "cut" }, { role: "copy" }, { role: "paste" }, { role: "selectAll" }] },
+    { label: "窗口", submenu: [{ role: "minimize" }, { role: "zoom" }, { type: "separator" }, { role: "toggleFullScreen" }] },
+  ]);
 }
 
-function load(): RequestRef[] {
-  try {
-    return JSON.parse(Callme.list(root));
-  } catch {
-    return [];
-  }
-}
+keymap.bind(
+  {
+    "mod+enter": () => send(),
+    "mod+k": () => paletteOpen.set(!paletteOpen()),
+  },
+  { when: "always" },
+);
 
-const methodColor: Record<string, string> = { GET: "text-teal-600", POST: "text-orange-600", PUT: "text-blue-600", DELETE: "text-red-600" };
+// Files change under the app (an agent edits them): look once a second.
+setInterval(checkExternalChanges, 1000);
+
+const first = requests()[0];
+if (first) selectRequest(first);
+
+function StatusBar() {
+  const left = computed(() =>
+    view() === "env" ? "环境变量" : activeFile() ? `${activeFile()} · 第 ${currentIndex() || "-"} 个请求` : root,
+  );
+  return (
+    <View class="h-[26px] flex-row items-center gap-4 border-t border-border bg-title-bar px-3">
+      <Text class="text-[11px] text-muted-foreground">{left()}</Text>
+      <Text class="flex-1 text-[11px] text-brand" style={{ numberOfLines: 1 }}>{notice() ?? ""}</Text>
+      <Text class="text-[11px] text-muted-foreground">{`环境 ${env() ?? "未选择"} · ${envState().vars.length} 个变量`}</Text>
+    </View>
+  );
+}
 
 function App() {
-  const requests = signal<RequestRef[]>(load());
-  const first = requests()[0];
-  const file = signal(first?.file ?? "");
-  const selected = signal(first?.id ?? "");
-  const text = signal(first ? Callme.read(root, first.file) : "");
-  const run = signal<Run | null>(null);
-  const events = signal<unknown[]>([]);
-  const status = signal("");
-  const running = signal(false);
-
-  const open = (r: RequestRef) => {
-    if (r.file !== file()) {
-      file.set(r.file);
-      text.set(Callme.read(root, r.file));
-    }
-    selected.set(r.id);
-  };
-
-  const send = async () => {
-    if (!file() || running()) return;
-    running.set(true);
-    run.set(null);
-    events.set([]);
-    status.set("发送中…");
-    try {
-      Callme.write(root, file(), text());
-      requests.set(load());
-      const out = await Callme.run(root, file(), selected() || null, null, (message) => {
-        const m = JSON.parse(message);
-        if (m.type === "head" && m.streaming) status.set(`${m.status} · 流式接收中…`);
-        if (m.type === "event") events.set([...events(), m.event]);
-      });
-      run.set(JSON.parse(out));
-      status.set("");
-    } catch (e) {
-      status.set(errorMessage(e));
-    }
-    running.set(false);
-  };
-
-  const bodyText = () => {
-    const r = run();
-    if (!r) return "";
-    const b = r.response.body;
-    return typeof b === "string" ? b : JSON.stringify(b, null, 2);
-  };
-  const bodyFolds = () => JSON.parse(Callme.jsonFolds(bodyText()));
-
+  // A picked history record belongs to the request it was picked for.
+  effect(() => {
+    void currentRequest();
+    clearPicked();
+  });
   return (
-    <View class="flex-1 flex-row bg-background">
-      <View class="w-60 border-r border-border bg-muted/30 pt-10">
-        <Text class="px-4 pb-2 text-xs font-semibold text-muted-foreground">请求</Text>
-        <Scroll class="flex-1">
-          <Each of={requests()}>
-            {(r) => (
-              <View
-                role="button"
-                onPress={() => open(r())}
-                class={`mx-2 flex-row gap-2 rounded-md px-2 py-1.5 ${r().file === file() && r().id === selected() ? "bg-primary/15" : ""}`}
-              >
-                <Text class={`w-12 font-mono text-xs font-bold ${methodColor[r().method] ?? ""}`}>{r().method}</Text>
-                <Text class="flex-1 text-sm" style={{ numberOfLines: 1 }}>{r().name ?? `${r().file}#${r().index}`}</Text>
-              </View>
-            )}
-          </Each>
-        </Scroll>
-      </View>
-
-      <View class="flex-1">
-        <View class="h-12 flex-row items-center gap-3 border-b border-border px-3">
-          <Text class="flex-1 text-sm text-muted-foreground" style={{ numberOfLines: 1 }}>{file() ? `${file()} · ${selected()}` : `${root} 里没有 .http 文件`}</Text>
-          <View role="button" onPress={send} class={`rounded-md px-4 py-1.5 ${running() ? "bg-muted" : "bg-foreground active:bg-foreground/80"}`}>
-            <Text class={running() ? "text-muted-foreground" : "text-background font-semibold"}>{running() ? "发送中" : "发送"}</Text>
-          </View>
-        </View>
-        <Editor
-          value={text()}
-          onChange={({ value }) => text.set(value)}
-          language="http"
-          foldRanges={JSON.parse(Callme.httpFolds(text()))}
-          class="flex-1"
-        />
-      </View>
-
-      <View class="w-[480px] border-l border-border">
-        <View class="h-12 flex-row items-center gap-3 border-b border-border px-3">
-          <If when={run()}>
-            {(r) => (
-              <>
-                <Text class={`font-mono font-bold ${r().response.status < 400 ? "text-green-600" : "text-red-600"}`}>
-                  {`${r().response.status} ${r().response.reason}`}
-                </Text>
-                <Text class="font-mono text-xs text-muted-foreground">{`${r().timing.total} ms · ${r().response.size} B · ${r().response.httpVersion}`}</Text>
-              </>
-            )}
-          </If>
-          <Text class="flex-1 text-sm text-muted-foreground" style={{ numberOfLines: 2 }}>{status()}</Text>
-        </View>
-        <If when={events().length > 0}>
-          <Scroll class="max-h-60 border-b border-border">
-            <Each of={events()}>
-              {(e) => <Text class="px-3 py-1 font-mono text-xs">{JSON.stringify(e())}</Text>}
-            </Each>
-          </Scroll>
+    <View class="flex-1 bg-background">
+      <TitleBar />
+      <View class="min-h-0 flex-1 flex-row">
+        <Sidebar />
+        <If when={view() === "env"} else={<><RequestPane /><ResponsePane /></>}>
+          <EnvPane />
         </If>
-        <Editor value={bodyText()} language="json" readOnly foldRanges={bodyFolds()} class="flex-1" />
       </View>
+      <StatusBar />
+      <Palette />
     </View>
   );
 }

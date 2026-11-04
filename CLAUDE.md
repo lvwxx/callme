@@ -56,4 +56,6 @@ cargo run -p callme -- help format
 - `app/`：nsh 混合模式的 GUI（TSX 界面 + Rust crate）。`src/lib.rs` 注册 `.http` 语言和高亮器（用 core 的 `lang::tokens`），`Callme` 模块在 `blocking` 线程里跑请求，SSE 事件经 channel 回到引擎线程再 `post` 给 TSX。
 - nsh 要用源码版（`~/.nsh/source`，0.4.0）：crates.io 的 0.2.0 没有 `Editor`。`app/Cargo.toml` 目前依赖本机绝对路径，后面要换成 git 依赖。
 - GUI 测试：`scripts/test-app.sh`（无界面）；加 `tests/screenshot.test.tsx --target macos` 在真实窗口里截图。
-- 进度：M0（nsh 原型）、M1（core + CLI）、M2（MCP）已完成；M3（完整 GUI）还没开始。
+- GUI 结构：`api.ts`（native 调用）、`store.ts`（状态、自动保存、外部修改检测、发送）、`TitleBar` / `Sidebar` / `RequestPane` / `ResponsePane` / `EnvPane` / `Palette`；主题在 `theme.json`（Longbridge GPUI 色值）。
+- nsh 的坑：无障碍属性是 `accessibilityLabel` / `accessibilityState`（不是 aria-*）；自定义主题色不能加 `/60` 透明度；无界面测试的 `texts()` 不含补全和悬停浮层，要在 `--target macos` 下截图看。
+- 进度：M0、M1（core + CLI）、M2（MCP）、M3（GUI 主体）已完成。
