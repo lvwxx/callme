@@ -1,0 +1,21 @@
+[package]
+name = "callme-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Parse, resolve and execute .http request files"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+curl = "0.4"
+serde_json_path = "0.7"
+regex = "1"
+shell-words = "1"
+uuid = { version = "1", features = ["v4"] }
+fastrand = "2"
+humantime = "2"
+
+[dev-dependencies]
+tempfile = "3"

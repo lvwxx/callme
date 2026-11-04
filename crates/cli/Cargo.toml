@@ -1,0 +1,18 @@
+[package]
+name = "callme"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "A simple, AI-friendly API client for .http files"
+
+[[bin]]
+name = "callme"
+path = "src/main.rs"
+
+[dependencies]
+callme-core.workspace = true
+serde_json.workspace = true
+clap = { version = "4", features = ["derive"] }
+
+[dev-dependencies]
+tempfile = "3"
