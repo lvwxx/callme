@@ -1,0 +1,16 @@
+### 回显请求（切换到 echo 环境：标题栏右上角）
+# @name anything
+POST {{baseUrl}}/anything?from=callme
+X-Request-Id: {{$uuid}}
+Content-Type: application/json
+
+{"hello": "world", "n": {{$randomInt}}}
+
+### 跟随重定向
+# @name redirect
+GET {{baseUrl}}/redirect/2
+
+### 不跟随重定向
+# @name stay
+# @no-redirect
+GET {{baseUrl}}/redirect/2

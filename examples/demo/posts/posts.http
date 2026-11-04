@@ -1,0 +1,25 @@
+### 获取一篇文章
+# @name get
+GET {{baseUrl}}/posts/1
+Accept: application/json
+Authorization: Bearer {{token}}
+
+### 文章列表（query 可以写在续行里）
+# @name list
+GET {{baseUrl}}/posts
+    ?userId={{userId}}
+    &_limit=5
+
+### 创建文章：userId 取自上面 get 请求最近一次的响应
+# @name create
+POST {{baseUrl}}/posts
+
+{
+  "title": "来自 callme",
+  "body": "{{$isoTimestamp}}",
+  "userId": {{get.response.body.$.userId}}
+}
+
+### 删除
+# @name remove
+DELETE {{baseUrl}}/posts/1

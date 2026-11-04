@@ -2,3 +2,4 @@
 .callme/
 http-client.private.env.json
 .DS_Store
+examples/demo/.callme/
