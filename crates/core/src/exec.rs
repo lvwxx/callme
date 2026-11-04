@@ -45,8 +45,15 @@ pub struct Timing {
     pub total: f64,
 }
 
-/// Sees the body as it arrives.
-pub type OnChunk<'a> = Option<&'a mut dyn FnMut(&[u8])>;
+/// Sees a request as it goes: what is sent, the head of each response (a redirect's too), then the final body in
+/// chunks as they arrive. The CLI prints server-sent events with it; the GUI streams the body into its view.
+pub trait Watcher {
+    fn start(&mut self, _method: &str, _url: &str) {}
+    fn head(&mut self, _status: u16, _headers: &[(String, String)]) {}
+    fn chunk(&mut self, _data: &[u8]) {}
+}
+
+pub type OnChunk<'a> = Option<&'a mut dyn Watcher>;
 
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 const USER_AGENT: &str = concat!("callme/", env!("CARGO_PKG_VERSION"));
@@ -61,8 +68,8 @@ struct Collector<'a> {
 impl Handler for Collector<'_> {
     fn write(&mut self, data: &[u8]) -> Result<usize, WriteError> {
         self.body.extend_from_slice(data);
-        if let Some(f) = self.on_chunk.as_mut() {
-            f(data);
+        if let Some(w) = self.on_chunk.as_mut() {
+            w.chunk(data);
         }
         Ok(data.len())
     }
@@ -70,7 +77,13 @@ impl Handler for Collector<'_> {
     fn header(&mut self, data: &[u8]) -> bool {
         let line = String::from_utf8_lossy(data);
         let line = line.trim_end();
-        if line.starts_with("HTTP/") {
+        if line.is_empty() {
+            // The end of a head.
+            if let Some(w) = self.on_chunk.as_mut() {
+                let status = self.status_line.split_whitespace().nth(1).and_then(|c| c.parse().ok()).unwrap_or(0);
+                w.head(status, &self.headers);
+            }
+        } else if line.starts_with("HTTP/") {
             // A new response (after a redirect or a 100 Continue): only the last one counts.
             self.status_line = line.to_string();
             self.headers.clear();

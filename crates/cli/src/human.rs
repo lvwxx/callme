@@ -1,11 +1,13 @@
 //! Output for people in a terminal.
 
-use std::io::IsTerminal;
+use std::io::{IsTerminal, Write};
 
 use callme_core::env::{Source, Vars};
 use callme_core::history::{BodyKind, Record};
 use callme_core::project::RequestRef;
-use callme_core::run::RunResult;
+use callme_core::exec::Watcher;
+use callme_core::run::{RunResult, SseDecoder};
+use serde_json::Value;
 use callme_core::Error;
 
 fn color() -> bool {
@@ -42,20 +44,83 @@ fn size(n: usize) -> String {
     }
 }
 
-pub fn run(result: &RunResult, include: bool) {
-    let r = &result.record;
-    let env = r.env.as_deref().map(|e| format!("  ({e})")).unwrap_or_default();
-    println!("{} {}{}", paint("1", &r.request.method), r.request.url, dim(&env));
-    let resp = &r.response;
-    println!(
-        "{}  {}",
-        paint(status_code(resp.status), &format!("{} {}", resp.status, resp.reason)),
-        dim(&format!("{} · {} ms · {}", resp.http_version, r.timing.total, size(resp.size)))
-    );
-    if include {
-        for (n, v) in &resp.headers {
-            println!("{}: {}", paint("36", n), v);
+/// Prints a run as it goes: the request first, then server-sent events as they arrive.
+#[derive(Default)]
+pub struct Live {
+    include: bool,
+    sse: Option<SseDecoder>,
+    events: usize,
+}
+
+impl Live {
+    pub fn new(include: bool) -> Self {
+        Live { include, ..Default::default() }
+    }
+}
+
+impl Watcher for Live {
+    fn start(&mut self, method: &str, url: &str) {
+        println!("{} {}", paint("1", method), url);
+        let _ = std::io::stdout().flush();
+    }
+
+    fn head(&mut self, status: u16, headers: &[(String, String)]) {
+        let streaming = headers
+            .iter()
+            .any(|(n, v)| n.eq_ignore_ascii_case("content-type") && v.to_ascii_lowercase().starts_with("text/event-stream"));
+        if streaming && !(300..400).contains(&status) {
+            self.sse = Some(SseDecoder::default());
+            println!("{}  {}", paint(status_code(status), &status.to_string()), dim("流式接收中…"));
+            if self.include {
+                print_headers(headers);
+            }
+            println!();
+            let _ = std::io::stdout().flush();
         }
+    }
+
+    fn chunk(&mut self, data: &[u8]) {
+        if let Some(d) = self.sse.as_mut() {
+            let events = d.push(data);
+            self.events += events.len();
+            events.iter().for_each(print_event);
+            let _ = std::io::stdout().flush();
+        }
+    }
+}
+
+fn print_event(e: &Value) {
+    let name = e.get("event").and_then(Value::as_str).unwrap_or("message");
+    let data = match e.get("data") {
+        Some(Value::String(s)) => s.clone(),
+        Some(v) => v.to_string(),
+        None => String::new(),
+    };
+    println!("{}  {}", paint("36", name), data);
+}
+
+fn print_headers(headers: &[(String, String)]) {
+    for (n, v) in headers {
+        println!("{}: {}", paint("36", n), v);
+    }
+}
+
+/// The rest of a run after [`Live`] printed its request (and events).
+pub fn finish(result: &RunResult, live: &mut Live) {
+    let r = &result.record;
+    let resp = &r.response;
+    let env = r.env.as_deref().map(|e| format!(" · {e}")).unwrap_or_default();
+    let summary = format!("{} · {} ms · {}{env}", resp.http_version, r.timing.total, size(resp.size));
+    if let Some(d) = live.sse.as_mut() {
+        let rest = d.finish();
+        live.events += rest.len();
+        rest.iter().for_each(print_event);
+        println!("\n{}", dim(&format!("{} 个事件 · {summary}", live.events)));
+        return;
+    }
+    println!("{}  {}", paint(status_code(resp.status), &format!("{} {}", resp.status, resp.reason)), dim(&summary));
+    if live.include {
+        print_headers(&resp.headers);
     }
     println!();
     body(r, Some(&result.raw_body));

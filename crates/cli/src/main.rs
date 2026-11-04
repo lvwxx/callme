@@ -125,12 +125,14 @@ fn dispatch(cmd: Cmd, project: &Project, json: bool) -> Result<u8, Error> {
             let (file, id) = split_target(&target);
             let file = project.relative(std::path::Path::new(file));
             let overrides = parse_vars(&vars)?;
-            let result = run::run(project, &file, id, RunOptions { env, overrides, on_chunk: None })?;
             if json {
+                let result = run::run(project, &file, id, RunOptions { env, overrides, on_chunk: None })?;
                 print_json(&output::record_json(&result.record, Some(&result.raw_body), Some(&result.history_file), max_body));
-            } else {
-                human::run(&result, include);
+                return Ok(if fail && result.record.response.status >= 400 { 1 } else { 0 });
             }
+            let mut live = human::Live::new(include);
+            let result = run::run(project, &file, id, RunOptions { env, overrides, on_chunk: Some(&mut live) })?;
+            human::finish(&result, &mut live);
             Ok(if fail && result.record.response.status >= 400 { 1 } else { 0 })
         }
         Cmd::Ls => {

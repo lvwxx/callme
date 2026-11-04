@@ -30,7 +30,11 @@ pub fn run(project: &Project, file: &str, id: Option<&str>, opts: RunOptions<'_>
     let vars = project.env_files()?.resolve(env.as_deref(), &opts.overrides)?;
     let cx = Context { project, file, vars: &vars };
     let resolved = cx.prepare(&request, Some(project.state_dir().join("cookies.txt")))?;
-    let response = exec::execute(&resolved.prepared, opts.on_chunk)?;
+    let mut watcher = opts.on_chunk;
+    if let Some(w) = watcher.as_mut() {
+        w.start(&resolved.prepared.method, &vars.mask(&resolved.prepared.url));
+    }
+    let response = exec::execute(&resolved.prepared, watcher)?;
 
     let content_type = response
         .headers
@@ -118,6 +122,42 @@ pub fn parse_sse(text: &str) -> Vec<Value> {
     events
 }
 
+/// Splits a stream of server-sent events into events as their blocks complete.
+#[derive(Debug, Default)]
+pub struct SseDecoder {
+    buf: String,
+    pending: Vec<u8>,
+}
+
+impl SseDecoder {
+    /// Takes the next chunk; returns the events it completed.
+    pub fn push(&mut self, data: &[u8]) -> Vec<Value> {
+        self.pending.extend_from_slice(data);
+        // Keep an incomplete UTF-8 sequence for the next chunk.
+        let valid = match std::str::from_utf8(&self.pending) {
+            Ok(s) => s.len(),
+            Err(e) => e.valid_up_to(),
+        };
+        self.buf.push_str(std::str::from_utf8(&self.pending[..valid]).unwrap());
+        self.pending.drain(..valid);
+        if self.buf.contains('\r') {
+            self.buf = self.buf.replace("\r\n", "\n");
+        }
+        match self.buf.rfind("\n\n") {
+            Some(end) => {
+                let complete: String = self.buf.drain(..end + 2).collect();
+                parse_sse(&complete)
+            }
+            None => vec![],
+        }
+    }
+
+    /// The events left when the stream ends.
+    pub fn finish(&mut self) -> Vec<Value> {
+        parse_sse(&std::mem::take(&mut self.buf))
+    }
+}
+
 fn state_path(project: &Project) -> std::path::PathBuf {
     project.state_dir().join("state.json")
 }
@@ -162,6 +202,18 @@ mod tests {
         assert_eq!(events[0]["data"]["t"], "he");
         assert_eq!(events[1]["data"], "line1\nline2");
         assert_eq!(events[1]["id"], "2");
+    }
+
+    #[test]
+    fn decodes_events_across_chunks() {
+        let mut d = SseDecoder::default();
+        assert!(d.push(b"event: a\ndata: {\"x\"").is_empty());
+        let e = d.push(b": 1}\n\ndata: \xe4\xbd");
+        assert_eq!(e.len(), 1);
+        assert_eq!(e[0]["data"]["x"], 1);
+        let e = d.push(b"\xa0\xe5\xa5\xbd\r\n\r\ndata: tail");
+        assert_eq!(e[0]["data"], "你好");
+        assert_eq!(d.finish()[0]["data"], "tail");
     }
 
     #[test]
