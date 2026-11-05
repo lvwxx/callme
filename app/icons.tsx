@@ -3,7 +3,7 @@
 import { Canvas, Path2D, token } from "nsh";
 
 type El =
-  | { tag: "path"; d: string }
+  | { tag: "path"; d: string; fill?: boolean }
   | { tag: "circle"; cx: number; cy: number; r: number }
   | { tag: "rect"; x: number; y: number; width: number; height: number; rx: number };
 
@@ -22,11 +22,16 @@ const icons = {
   send: [{ tag: "path", d: "M5 12h14" }, { tag: "path", d: "m12 5 7 7-7 7" }],
   list: [{ tag: "path", d: "M2 5h20" }, { tag: "path", d: "M6 12h12" }, { tag: "path", d: "M9 19h6" }],
   x: [{ tag: "path", d: "M18 6 6 18" }, { tag: "path", d: "m6 6 12 12" }],
+  play: [{ tag: "path", d: "M6 4.5v15l13-7.5z", fill: true }],
+  terminal: [{ tag: "path", d: "m4 17 6-6-6-6" }, { tag: "path", d: "M12 19h8" }],
+  foldAll: [{ tag: "path", d: "m7 20 5-5 5 5" }, { tag: "path", d: "m7 4 5 5 5-5" }],
+  unfoldAll: [{ tag: "path", d: "m7 15 5 5 5-5" }, { tag: "path", d: "m7 9 5-5 5 5" }],
+  filter: [{ tag: "path", d: "M3 5h18" }, { tag: "path", d: "M6 12h12" }, { tag: "path", d: "M10 19h4" }],
 } satisfies Record<string, El[]>;
 
 export type IconName = keyof typeof icons;
 
-/** An icon on Lucide's 24 × 24 grid, stroked with `color` (a theme token name, default `muted-foreground`). */
+/** An icon on Lucide's 24 × 24 grid, stroked with `color`: a theme token's name (default `muted-foreground`) or a hex color. */
 export function Icon(props: { name: IconName; size?: number; color?: string }) {
   const size = props.size ?? 14;
   return (
@@ -34,12 +39,16 @@ export function Icon(props: { name: IconName; size?: number; color?: string }) {
       style={{ pointerEvents: "none", width: size, height: size }}
       draw={(cx, { width }) => {
         cx.scale(width / 24, width / 24);
-        cx.strokeStyle = token((props.color ?? "muted-foreground") as never) as string;
+        const color = props.color ?? "muted-foreground";
+        cx.strokeStyle = color.startsWith("#") ? color : (token(color as never) as string);
         cx.lineWidth = 2;
         cx.lineCap = "round";
         cx.lineJoin = "round";
         for (const el of icons[props.name] as El[]) {
-          if (el.tag === "path") cx.stroke(new Path2D(el.d));
+          if (el.tag === "path" && el.fill) {
+            cx.fillStyle = cx.strokeStyle;
+            cx.fill(new Path2D(el.d));
+          } else if (el.tag === "path") cx.stroke(new Path2D(el.d));
           else {
             cx.beginPath();
             if (el.tag === "circle") cx.arc(el.cx, el.cy, el.r, 0, Math.PI * 2);

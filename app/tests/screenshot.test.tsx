@@ -10,6 +10,9 @@ test("screenshots", async () => {
   await app.waitFor("text:OK", { timeout: 10_000 });
   await app.wait(500);
   await app.screenshot("screenshots/2-sent.png");
+  await app.hover("label:复制为 curl");
+  await app.wait(900);
+  await app.screenshot("screenshots/2b-tooltip.png");
   await app.press("label:GET stream");
   await app.press("text:发送");
   await app.waitFor("text:[DONE]", { timeout: 10_000 });

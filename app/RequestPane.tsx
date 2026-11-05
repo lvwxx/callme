@@ -23,7 +23,7 @@ import {
   tabs,
   text,
 } from "./store";
-import { Button } from "./ui";
+import { Button, Divider, IconButton, Method, SendButton } from "./ui";
 
 const hover = signal<{ data: Hover | null; anchor: Bounds; messages: string[] } | null>(null);
 
@@ -63,15 +63,16 @@ function RequestBar() {
   const p = () => preview();
   const running = () => currentRun()?.running ?? false;
   return (
-    <View class="h-11 flex-row items-center gap-2 border-b border-border px-3">
+    <View class="h-11 flex-row items-center gap-1 border-b border-border pl-3 pr-2">
       <If when={p() && "url" in p()!} else={<Text class="flex-1 text-xs text-status-err" style={{ numberOfLines: 1 }}>{p() && "message" in p()! ? (p() as { message: string }).message : "光标不在任何请求里"}</Text>}>
-        <Text class="font-mono text-xs font-bold text-method-get">{(p() as { method: string }).method}</Text>
-        <Text class="text-[13px] font-semibold text-foreground">{currentRequest()?.name ?? `#${currentIndex()}`}</Text>
-        <Text class="flex-1 font-mono text-xs text-muted-foreground" style={{ numberOfLines: 1 }}>{(p() as { url: string }).url}</Text>
+        <Method method={(p() as { method: string }).method} class="w-auto text-xs" />
+        <Text class="ml-1 text-[13px] font-semibold text-foreground">{currentRequest()?.name ?? `#${currentIndex()}`}</Text>
+        <Text class="ml-2 flex-1 font-mono text-xs text-muted-foreground" style={{ numberOfLines: 1 }}>{(p() as { url: string }).url}</Text>
       </If>
-      <Button label="新建请求" hint="⌘N" onPress={newRequest} />
-      <Button label="复制为 curl" onPress={copyCurl} />
-      <Button label={running() ? "发送中" : "发送"} hint="⌘↵" primary disabled={running() || !currentIndex()} onPress={send} />
+      <IconButton icon="plus" label="新建请求" shortcut="⌘N" onPress={newRequest} />
+      <IconButton icon="terminal" label="复制为 curl" shortcut="⌘⇧C" onPress={copyCurl} />
+      <Divider />
+      <SendButton running={running()} disabled={!currentIndex()} onPress={send} />
     </View>
   );
 }

@@ -1,5 +1,6 @@
 // Small pieces the panes share.
 import { type JSX, Text, View } from "nsh";
+import { Tooltip } from "nsh/base";
 import { Icon, type IconName } from "./icons";
 
 const methodClass: Record<string, string> = {
@@ -31,12 +32,56 @@ export function SectionLabel(props: { children: JSX.Element }) {
   return <Text class="px-2 pb-1.5 text-[11px] font-semibold text-muted-foreground">{props.children}</Text>;
 }
 
-export function IconButton(props: { icon: IconName; label: string; onPress: () => void }) {
+/** The hint an icon button shows when the pointer rests on it: its name, and its shortcut. */
+export function Tip(props: { label: string; shortcut?: string }) {
   return (
-    <View role="button" accessibilityLabel={props.label} onPress={props.onPress} class="h-7 w-7 items-center justify-center rounded-md hover:bg-list-hover">
-      <Icon name={props.icon} />
+    <Tooltip class="flex-row items-center gap-2 rounded-md bg-foreground px-2 py-1">
+      <Text class="text-xs text-background">{props.label}</Text>
+      <If when={props.shortcut}>
+        <Text class="font-mono text-[11px] text-background opacity-60">{props.shortcut!}</Text>
+      </If>
+    </Tooltip>
+  );
+}
+
+/** A borderless icon button: its name and shortcut show as a tooltip. */
+export function IconButton(props: { icon: IconName; label: string; shortcut?: string; onPress: () => void; size?: number }) {
+  return (
+    <View
+      role="button"
+      accessibilityLabel={props.label}
+      onPress={props.onPress}
+      tooltip={<Tip label={props.label} shortcut={props.shortcut} />}
+      class="h-7 w-7 items-center justify-center rounded-md hover:bg-list-hover active:bg-list-active"
+    >
+      <Icon name={props.icon} size={props.size ?? 15} />
     </View>
   );
+}
+
+/** The one filled button of the request bar. */
+export function SendButton(props: { running: boolean; disabled: boolean; onPress: () => void }) {
+  const off = () => props.disabled || props.running;
+  return (
+    <View
+      role="button"
+      accessibilityLabel={props.running ? "发送中" : "发送"}
+      onPress={() => !off() && props.onPress()}
+      tooltip={<Tip label="发送当前请求" shortcut="⌘↵" />}
+      class={`h-7 flex-row items-center gap-2 rounded-md pl-3 pr-2.5 ${off() ? "bg-muted" : "bg-brand hover:opacity-90 active:opacity-80"}`}
+    >
+      <Icon name="play" size={12} color={off() ? "muted-foreground" : "#0a0e19"} />
+      <Text class={`text-[13px] font-semibold ${off() ? "text-muted-foreground" : "text-[#0a0e19]"}`}>{props.running ? "发送中" : "发送"}</Text>
+      <View class={`rounded px-1 ${off() ? "" : "bg-[#0a0e1914]"}`}>
+        <Text class={`font-mono text-[11px] ${off() ? "text-muted-foreground" : "text-[#0a0e19]"}`}>⌘↵</Text>
+      </View>
+    </View>
+  );
+}
+
+/** A thin vertical rule between groups of a toolbar. */
+export function Divider() {
+  return <View class="mx-1.5 h-[18px] w-px bg-border" />;
 }
 
 export function Button(props: { label: string; onPress: () => void; primary?: boolean; disabled?: boolean; hint?: string }) {

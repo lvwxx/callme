@@ -58,7 +58,7 @@ test("reloads a file changed outside", async () => {
 
 test("adds a request to the open file", async () => {
   const app = await open("./App.tsx", { width: 1280, height: 800 });
-  await app.press("text:新建请求");
+  await app.press("label:新建请求");
   await app.waitFor("text:# @name request", { timeout: 5_000 });
   await app.waitFor("label:GET request", { timeout: 5_000 });
   expect(Callme.read(Callme.root(), "api.http")).toContain("# @name request");

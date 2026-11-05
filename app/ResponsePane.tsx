@@ -3,7 +3,8 @@
 import { computed, Scroll, signal, Text, View } from "nsh";
 import { Editor, Input } from "nsh/base";
 import { api, type Run } from "./api";
-import { IconButton, Status, Tabs, size } from "./ui";
+import { Icon } from "./icons";
+import { IconButton, Status, Tabs, Tip, size } from "./ui";
 import { currentRequest, currentRun, editor, notice, runs } from "./store";
 
 type Tab = "body" | "headers" | "timing" | "history";
@@ -86,20 +87,33 @@ function Body() {
   const sse = () => !picked() && (streaming() || run()?.response.bodyKind === "sse");
   return (
     <>
-      <View class="flex-row items-center gap-1.5 border-b border-border px-3 py-2">
-        <View class="h-7 flex-1 flex-row items-center gap-2 rounded-md border border-input bg-background px-2">
-          <Text class="text-[11px] text-muted-foreground">过滤</Text>
+      <View class="h-11 flex-row items-center gap-2 border-b border-border pl-3 pr-2">
+        <View class="h-7 flex-1 flex-row items-center gap-2 rounded-md bg-muted/40 px-2">
+          <Icon name="filter" size={13} />
           <Input
             value={query()}
             onChange={({ value }) => query.set(value)}
-            placeholder="$.user.roles"
+            placeholder="JSONPath，如 $.user.roles"
             class="flex-1 font-mono text-xs text-foreground placeholder:text-muted-foreground"
           />
         </View>
-        <Fold label="全部折叠" onPress={() => editor.response?.run("foldAll")} />
-        <Fold label="L1" onPress={() => (editor.response?.run("unfoldAll"), editor.response?.foldLevel(2))} />
-        <Fold label="L2" onPress={() => (editor.response?.run("unfoldAll"), editor.response?.foldLevel(3))} />
-        <Fold label="全部展开" onPress={() => editor.response?.run("unfoldAll")} />
+        <View class="flex-row gap-0.5 rounded-md bg-tab-bar p-0.5" role="group" accessibilityLabel="折叠">
+          <FoldIcon icon="foldAll" label="全部折叠" onPress={() => (level.set(0), editor.response?.run("foldAll"))} />
+          <Each of={[1, 2, 3]}>
+            {(n) => (
+              <View
+                role="button"
+                accessibilityLabel={`展开到第 ${n()} 层`}
+                tooltip={<Tip label={`展开到第 ${n()} 层`} />}
+                onPress={() => (level.set(n()), editor.response?.run("unfoldAll"), editor.response?.foldLevel(n() + 1))}
+                class={`h-6 justify-center rounded px-2 ${level() === n() ? "bg-tab-active" : "hover:bg-list-hover"}`}
+              >
+                <Text class={`text-xs ${level() === n() ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{String(n())}</Text>
+              </View>
+            )}
+          </Each>
+          <FoldIcon icon="unfoldAll" label="全部展开" onPress={() => (level.set(null), editor.response?.run("unfoldAll"))} />
+        </View>
       </View>
       <If when={filtered().error}>
         <Text class="px-3 py-1 text-xs text-status-err">{filtered().error!}</Text>
@@ -135,10 +149,19 @@ function Body() {
   );
 }
 
-function Fold(props: { label: string; onPress: () => void }) {
+/** The level the body was folded to by the toolbar: 0 all, 1–3 a level, null none. */
+const level = signal<number | null>(null);
+
+function FoldIcon(props: { icon: "foldAll" | "unfoldAll"; label: string; onPress: () => void }) {
   return (
-    <View role="button" accessibilityLabel={props.label} onPress={props.onPress} class="h-7 justify-center rounded-md px-2 hover:bg-list-hover">
-      <Text class="text-xs text-muted-foreground">{props.label}</Text>
+    <View
+      role="button"
+      accessibilityLabel={props.label}
+      tooltip={<Tip label={props.label} />}
+      onPress={props.onPress}
+      class="h-6 w-[26px] items-center justify-center rounded hover:bg-list-hover"
+    >
+      <Icon name={props.icon} size={14} />
     </View>
   );
 }
