@@ -4,7 +4,7 @@ import { Canvas, Path2D, token } from "nsh";
 
 type El =
   | { tag: "path"; d: string; fill?: boolean }
-  | { tag: "circle"; cx: number; cy: number; r: number }
+  | { tag: "circle"; cx: number; cy: number; r: number; fill?: boolean }
   | { tag: "rect"; x: number; y: number; width: number; height: number; rx: number };
 
 const icons = {
@@ -22,6 +22,9 @@ const icons = {
   send: [{ tag: "path", d: "M5 12h14" }, { tag: "path", d: "m12 5 7 7-7 7" }],
   list: [{ tag: "path", d: "M2 5h20" }, { tag: "path", d: "M6 12h12" }, { tag: "path", d: "M9 19h6" }],
   x: [{ tag: "path", d: "M18 6 6 18" }, { tag: "path", d: "m6 6 12 12" }],
+  // callme's mark (assets/icon.svg's on a 24 grid): an open "c" and the request leaving it.
+  // assets/icon.svg's tile (100–924) mapped onto 0–24: × 24/824 after −100.
+  logo: [{ tag: "path", d: "M15.75 8.18 A 5.53 5.53 0 1 0 15.75 15.82" }, { tag: "circle", cx: 17.82, cy: 12, r: 1.51, fill: true }],
   play: [{ tag: "path", d: "M6 4.5v15l13-7.5z", fill: true }],
   terminal: [{ tag: "path", d: "m4 17 6-6-6-6" }, { tag: "path", d: "M12 19h8" }],
   foldAll: [{ tag: "path", d: "m7 20 5-5 5 5" }, { tag: "path", d: "m7 4 5 5 5-5" }],
@@ -32,7 +35,7 @@ const icons = {
 export type IconName = keyof typeof icons;
 
 /** An icon on Lucide's 24 × 24 grid, stroked with `color`: a theme token's name (default `muted-foreground`) or a hex color. */
-export function Icon(props: { name: IconName; size?: number; color?: string }) {
+export function Icon(props: { name: IconName; size?: number; color?: string; weight?: number }) {
   const size = props.size ?? 14;
   return (
     <Canvas
@@ -41,7 +44,7 @@ export function Icon(props: { name: IconName; size?: number; color?: string }) {
         cx.scale(width / 24, width / 24);
         const color = props.color ?? "muted-foreground";
         cx.strokeStyle = color.startsWith("#") ? color : (token(color as never) as string);
-        cx.lineWidth = 2;
+        cx.lineWidth = props.weight ?? 2;
         cx.lineCap = "round";
         cx.lineJoin = "round";
         for (const el of icons[props.name] as El[]) {
@@ -53,7 +56,10 @@ export function Icon(props: { name: IconName; size?: number; color?: string }) {
             cx.beginPath();
             if (el.tag === "circle") cx.arc(el.cx, el.cy, el.r, 0, Math.PI * 2);
             else cx.roundRect(el.x, el.y, el.width, el.height, el.rx);
-            cx.stroke();
+            if (el.tag === "circle" && el.fill) {
+              cx.fillStyle = cx.strokeStyle;
+              cx.fill();
+            } else cx.stroke();
           }
         }
       }}

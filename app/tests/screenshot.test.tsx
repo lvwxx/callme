@@ -6,11 +6,14 @@ test("screenshots", async () => {
   const app = await open("../App.tsx", { width: 1440, height: 900 });
   await app.wait(1500);
   await app.screenshot("screenshots/1-open.png");
+  await app.hover("label:项目");
+  await app.wait(900);
+  await app.screenshot("screenshots/1b-title.png");
   await app.press("text:发送");
   await app.waitFor("text:OK", { timeout: 10_000 });
   await app.wait(500);
   await app.screenshot("screenshots/2-sent.png");
-  await app.hover("label:复制为 curl");
+  await app.hover("label:curl 命令");
   await app.wait(900);
   await app.screenshot("screenshots/2b-tooltip.png");
   await app.press("label:GET 流式");

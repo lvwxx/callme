@@ -194,3 +194,13 @@ test("titles a request with any text", async () => {
   const text = Callme.read(Callme.root(), "api.http");
   expect(text).toContain("### 获取 当前用户（带 token）\n# @name me");
 });
+
+test("the project menu lists recent projects and opens folders", async () => {
+  const app = await open("./App.tsx", { width: 1280, height: 800, platform: "macos" });
+  await app.press("label:项目");
+  const labels = app.menu()!.map((m) => m.label);
+  expect(labels).toContain("打开文件夹…");
+  expect(labels).toContain("在 Finder 中显示");
+  expect(app.menu()!.find((m) => m.checked)?.label.endsWith("/project")).toBe(true);
+  await app.closeMenu();
+});

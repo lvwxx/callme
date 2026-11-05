@@ -76,6 +76,7 @@ export const api = {
   rename: (from: string, to: string) => Callme.rename(root(), from, to),
   trash: (file: string) => Callme.trash(root(), file),
   reveal: (file: string) => Callme.reveal(root(), file),
+  recent: (): string[] => JSON.parse(Callme.recent()),
   addEnv: (name: string, like?: string | null) => Callme.addEnv(root(), name, like ? like : null),
   read: (file: string) => Callme.read(root(), file),
   write: (file: string, text: string) => Callme.write(root(), file, text),

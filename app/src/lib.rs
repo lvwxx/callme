@@ -115,6 +115,13 @@ fn last_project_file() -> Option<PathBuf> {
     std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".callme").join("last-project"))
 }
 
+fn recent_projects() -> Vec<String> {
+    last_project_file()
+        .and_then(|f| std::fs::read_to_string(f.with_file_name("recent-projects.json")).ok())
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default()
+}
+
 fn last_project() -> Option<PathBuf> {
     let text = std::fs::read_to_string(last_project_file()?).ok()?;
     let path = text.trim();
@@ -154,14 +161,24 @@ impl Callme {
         }
     }
 
-    /// Remembers `root` as the project to open next time.
+    /// Remembers `root` as the project to open next time, first of the recent projects.
     pub fn remember(root: String) {
-        if let Some(file) = last_project_file() {
-            if let Some(dir) = file.parent() {
-                let _ = std::fs::create_dir_all(dir);
-            }
-            let _ = std::fs::write(file, root);
+        let Some(file) = last_project_file() else { return };
+        if let Some(dir) = file.parent() {
+            let _ = std::fs::create_dir_all(dir);
         }
+        let _ = std::fs::write(&file, &root);
+        let mut recent = recent_projects();
+        recent.retain(|p| *p != root);
+        recent.insert(0, root);
+        recent.truncate(8);
+        let _ = std::fs::write(file.with_file_name("recent-projects.json"), serde_json::to_string_pretty(&recent).unwrap());
+    }
+
+    /// The projects opened lately, newest first, those still there, as JSON.
+    pub fn recent() -> String {
+        let list: Vec<String> = recent_projects().into_iter().filter(|p| std::path::Path::new(p).is_dir()).collect();
+        serde_json::to_string(&list).unwrap()
     }
 
     /// Asks for a folder to open; resolves with its path, or null when cancelled.

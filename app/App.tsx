@@ -2,6 +2,7 @@
 // panes (or the environment view), a status bar, and the command palette over them.
 import { computed, effect, keymap, mount, signal, Text, View } from "nsh";
 import { isAvailable as hasWindow, Menu, Window } from "nsh/desktop";
+import { Callme } from "callme/native";
 import { api, project } from "./api";
 import { EnvPane } from "./EnvPane";
 import { Palette } from "./Palette";
@@ -74,6 +75,8 @@ keymap.bind(
 // Files change under the app (an agent edits them): look once a second.
 setInterval(checkExternalChanges, 1000);
 
+// The project opened at launch heads the recent ones too.
+if (project()) Callme.remember(project());
 const first = requests()[0];
 if (first) selectRequest(first);
 

@@ -1,13 +1,27 @@
 // The window's title bar, drawn by the app: the project, the command palette's entry, the environment.
 import { Text, View } from "nsh";
 import { isAvailable as hasWindow, Menu, titleBar } from "nsh/desktop";
-import { project } from "./api";
+import { api, project } from "./api";
 import { Icon } from "./icons";
-import { creatingEnv, env, envState, envTab, paletteOpen, saveNow, setEnv, view } from "./store";
-import { Kbd } from "./ui";
+import { creatingEnv, env, envState, envTab, openProject, paletteOpen, pickProject, saveNow, setEnv, view } from "./store";
+import { Kbd, Tip } from "./ui";
 
 const name = () => project().split("/").filter(Boolean).pop() ?? project();
 const home = () => project().replace(/^\/Users\/[^/]+/, "~");
+
+/** The project's menu: the recent projects, opening a folder, showing this one in the Finder. */
+function projectMenu() {
+  const short = (p: string) => p.replace(/^\/Users\/[^/]+/, "~");
+  const recent = api.recent();
+  Menu.popup([
+    ...(recent.length
+      ? recent.map((p) => ({ label: short(p), checked: p === project(), onSelect: () => p !== project() && openProject(p) }))
+      : [{ label: "还没有最近的项目", disabled: true }]),
+    { type: "separator" as const },
+    { label: "打开文件夹…", shortcut: "mod+o", onSelect: pickProject },
+    { label: "在 Finder 中显示", disabled: !project(), onSelect: () => void api.reveal("").catch(() => {}) },
+  ]);
+}
 
 export function TitleBar() {
   const pickEnv = () => {
@@ -33,11 +47,17 @@ export function TitleBar() {
       class="flex-row items-center gap-3 border-b border-title-bar-border bg-title-bar pr-3"
       style={{ height: (hasWindow && titleBar().height) || 44, paddingLeft: (hasWindow ? titleBar().left : 0) + 12 }}
     >
-      <View class="h-5 w-5 items-center justify-center rounded bg-brand">
-        <Text class="text-xs font-extrabold text-[#0a0e19]">c</Text>
+      <Icon name="logo" size={24} color="brand" weight={2.68} />
+      <View
+        role="button"
+        accessibilityLabel="项目"
+        onPress={projectMenu}
+        tooltip={<Tip label={project() ? home() : "还没有打开项目"} />}
+        class="h-7 flex-row items-center gap-1 rounded-md px-1.5 hover:bg-list-hover"
+      >
+        <Text class="text-[13px] font-semibold text-foreground">{project() ? name() : "callme"}</Text>
+        <Icon name="chevronDown" size={12} />
       </View>
-      <Text class="text-[13px] font-semibold text-foreground">{project() ? name() : "callme"}</Text>
-      <Text class="text-xs text-muted-foreground" style={{ numberOfLines: 1 }}>{home()}</Text>
       <View class="flex-1 items-center">
         <View
           role="button"
