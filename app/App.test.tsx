@@ -13,7 +13,7 @@ test("runs the current request", async () => {
 
 test("streams server-sent events as they arrive", async () => {
   const app = await open("./App.tsx", { width: 1280, height: 800 });
-  await app.press("label:GET stream");
+  await app.press("label:GET 流式");
   await app.press("text:发送");
   await app.waitFor('text:{"i":0,"t":"你"}', { timeout: 10_000 });
   // The first event shows while the stream still runs.
@@ -32,7 +32,7 @@ test("turns a pasted curl command into a request", async () => {
 
 test("sends with mod+enter", async () => {
   const app = await open("./App.tsx", { width: 1280, height: 800 });
-  await app.press("label:GET stream");
+  await app.press("label:GET 流式");
   await app.keyboard.press("mod+enter");
   await app.waitFor("text:[DONE]", { timeout: 10_000 });
 });
@@ -63,7 +63,7 @@ test("adds a request to the open file", async () => {
   // Return keeps the name it was given (headless, the field takes the keys once typed into).
   await app.type("id:name-input", "");
   await app.keyboard.press("enter");
-  await app.waitFor("label:GET request", { timeout: 5_000 });
+  await app.waitFor("label:GET 新请求", { timeout: 5_000 });
   expect(Callme.read(Callme.root(), "api.http")).toContain("# @name request");
 });
 
@@ -109,7 +109,7 @@ test("goes to a variable's definition", async () => {
 
 test("runs a request's dependency first", async () => {
   const app = await open("./App.tsx", { width: 1280, height: 800 });
-  await app.press("label:GET who");
+  await app.press("label:GET 依赖：用到 token 的响应");
   await app.press("text:发送");
   await app.waitFor("text:先运行 token，再运行这个请求", { timeout: 5_000 });
   await app.press("text:先运行 token，再运行这个请求");
@@ -125,7 +125,7 @@ test("comments out a header and formats a JSON body", async () => {
   await app.waitFor("text:# Accept: application/json", { timeout: 5_000 });
   await app.keyboard.press("mod+/");
   // A body on one line, formatted.
-  await app.press("label:POST create");
+  await app.press("label:POST 创建：请求体写在一行里");
   await app.keyboard.press("mod+shift+f");
   await app.waitFor('text:  "a": 1,', { timeout: 5_000 });
   await app.waitFor("text:    {{$uuid}}", { timeout: 5_000 });
@@ -160,12 +160,13 @@ test("folds and unfolds a file's requests", async () => {
 
 test("renames a request and the references to it", async () => {
   const app = await open("./App.tsx", { width: 1280, height: 800, platform: "macos" });
-  await app.rightClick("label:GET token");
-  await app.chooseMenuItem("重命名…");
+  await app.rightClick("label:GET 令牌");
+  await app.chooseMenuItem("修改请求名（@name）…");
   await app.clear("id:name-input");
   await app.type("id:name-input", "auth");
   await app.keyboard.press("enter");
-  await app.waitFor("label:GET auth", { timeout: 5_000 });
+  // The title stays; the name shows beside it.
+  await app.waitFor("text:auth", { timeout: 5_000 });
   const text = Callme.read(Callme.root(), "api.http");
   expect(text).toContain("# @name auth");
   expect(text).toContain("{{auth.response.body.$.user.id}}");
@@ -180,4 +181,16 @@ test("names a new request as it is added", async () => {
   await app.type("id:name-input", "agents");
   await app.keyboard.press("enter");
   await app.waitFor("label:GET agents", { timeout: 5_000 });
+});
+
+test("titles a request with any text", async () => {
+  const app = await open("./App.tsx", { width: 1280, height: 800, platform: "macos" });
+  await app.rightClick("label:GET 用户");
+  await app.chooseMenuItem("重命名…");
+  await app.clear("id:name-input");
+  await app.type("id:name-input", "获取 当前用户（带 token）");
+  await app.keyboard.press("enter");
+  await app.waitFor("label:GET 获取 当前用户（带 token）", { timeout: 5_000 });
+  const text = Callme.read(Callme.root(), "api.http");
+  expect(text).toContain("### 获取 当前用户（带 token）\n# @name me");
 });

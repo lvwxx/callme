@@ -56,6 +56,9 @@ export function apiError(e: unknown): ApiError {
 
 /** The open project's folder; empty while none is open. */
 export const project = signal(Callme.root());
+
+/** What a request is shown as: its title, else its name, else `#index`. */
+export const requestLabel = (r: RequestRef) => r.title || r.name || r.id;
 const root = () => project();
 
 const opt = (s: string | null | undefined) => (s ? s : null);
@@ -81,6 +84,8 @@ export const api = {
   jsonFolds: (text: string): Fold[] => JSON.parse(Callme.jsonFolds(text)),
   variables: (text: string): Span[] => JSON.parse(Callme.variables(text)),
   requestAt: (text: string, line: number) => Callme.requestAt(text, line),
+  setTitle: (text: string, index: number, title: string) => Callme.setTitle(text, index, title),
+  nameFromTitle: (title: string) => Callme.nameFromTitle(title),
   renameRequest: (file: string, text: string, index: number, name: string) => Callme.renameRequest(root(), file, text, index, name),
   formatBody: (text: string, index: number): string | null => Callme.formatBody(text, index),
   requestLine: (text: string, index: number) => Callme.requestLine(text, index),

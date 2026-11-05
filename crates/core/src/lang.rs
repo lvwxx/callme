@@ -468,6 +468,39 @@ pub fn rename_request(text: &str, index: usize, name: &str) -> Result<String, St
     Ok(lines.join("\n"))
 }
 
+/// `text` with request `index`'s title (the text after its `###`) set to `title`; a `###` line is added above a
+/// first request that has none. An empty title leaves a bare `###`.
+pub fn set_title(text: &str, index: usize, title: &str) -> Result<String, String> {
+    let title = title.trim();
+    if title.contains('\n') {
+        return Err("标题只能有一行".into());
+    }
+    let parsed = crate::parse::parse(text);
+    let r = parsed.requests.iter().find(|r| r.index == index).ok_or("没有这个请求")?;
+    let mut lines: Vec<String> = text.split('\n').map(str::to_string).collect();
+    let line = if title.is_empty() { "###".to_string() } else { format!("### {title}") };
+    match r.start_line.checked_sub(1).filter(|&l| lines[l].trim_start().starts_with("###")) {
+        Some(l) => lines[l] = line,
+        None => lines.insert(r.start_line, line),
+    }
+    Ok(lines.join("\n"))
+}
+
+/// A request name made from a title: whitespace and the characters names cannot hold become `-`.
+pub fn name_from_title(title: &str) -> String {
+    let mut out = String::new();
+    for c in title.trim().chars() {
+        if c.is_whitespace() || matches!(c, '.' | '#' | '{' | '}' | '/' | '\\' | '(' | ')' | '（' | '）' | ':' | '：' | ',' | '，') {
+            if !out.ends_with('-') && !out.is_empty() {
+                out.push('-');
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out.trim_end_matches('-').to_string()
+}
+
 /// `text` with the response references to request `old` (`{{old.response.…}}`) pointing at `new`.
 pub fn rename_references(text: &str, old: &str, new: &str) -> String {
     let mut out = String::with_capacity(text.len());
@@ -545,6 +578,17 @@ mod tests {
             t.replace("{{request2.response.body.$.t}}", "{{agents.response.body.$.t}}")
         );
         assert_eq!(rename_references("{{request22.response.body}} {{request2}}", "request2", "x"), "{{request22.response.body}} {{request2}}");
+    }
+
+    #[test]
+    fn sets_titles() {
+        let t = "# @name a\nGET /a\n\n### 旧标题\nGET /b\n";
+        assert_eq!(set_title(t, 2, "获取 agent 列表（console）").unwrap(), t.replace("### 旧标题", "### 获取 agent 列表（console）"));
+        assert_eq!(set_title(t, 1, "第一个").unwrap(), format!("### 第一个\n{t}"));
+        assert_eq!(set_title(t, 2, "").unwrap(), t.replace("### 旧标题", "###"));
+        assert_eq!(name_from_title("获取 agent 列表（console 用）"), "获取-agent-列表-console-用");
+        assert_eq!(name_from_title("  agents  "), "agents");
+        assert_eq!(name_from_title("..."), "");
     }
 
     #[test]

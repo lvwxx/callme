@@ -13,7 +13,7 @@ test("screenshots", async () => {
   await app.hover("label:复制为 curl");
   await app.wait(900);
   await app.screenshot("screenshots/2b-tooltip.png");
-  await app.press("label:GET stream");
+  await app.press("label:GET 流式");
   await app.press("text:发送");
   await app.waitFor("text:[DONE]", { timeout: 10_000 });
   await app.wait(500);
@@ -25,7 +25,7 @@ test("screenshots", async () => {
   await app.wait(300);
   await app.screenshot("screenshots/3c-history.png");
   await app.press("text:响应体");
-  await app.press("label:GET me");
+  await app.press("label:GET 用户");
   await app.wait(300);
   await app.hover("text:GET {{baseUrl}}/me");
   await app.wait(1200);

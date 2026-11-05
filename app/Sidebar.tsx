@@ -2,7 +2,7 @@
 import { computed, Scroll, signal, Text, View } from "nsh";
 import { Input } from "nsh/base";
 import { Menu } from "nsh/desktop";
-import { api } from "./api";
+import { api, requestLabel } from "./api";
 import type { RequestRef } from "./api";
 import { Icon } from "./icons";
 import {
@@ -16,6 +16,7 @@ import {
   recent,
   renameFile,
   renameRequest,
+  setTitle,
   copyCurl,
   afterNaming,
   requests,
@@ -59,7 +60,9 @@ const rows = computed<Row[]>(() => {
     const depth = parts.length - 1;
     out.push({ kind: "file", key: file, label: parts[parts.length - 1], depth, open: !closed().has(file), file });
     if (closed().has(file)) continue;
-    for (const r of requests().filter((r) => r.file === file)) out.push({ kind: "request", key: `${file}#${r.id}`, depth: depth + 1, request: r });
+    // The key holds what a row shows: a request retitled is drawn again.
+    for (const r of requests().filter((r) => r.file === file))
+      out.push({ kind: "request", key: `${file}#${r.id}#${r.method}#${r.title ?? ""}`, depth: depth + 1, request: r });
   }
   return out;
 });
@@ -100,38 +103,59 @@ export function Sidebar() {
             const pad = 8 + r.depth * 14 + (r.kind === "folder" ? 0 : 14);
             if (r.kind === "request") {
               const active = () => view() === "request" && activeFile() === r.request.file && currentIndex() === r.request.index;
-              const renaming = () => {
+              const editing = () => {
                 const n = naming();
-                return n?.kind === "request" && n.file === r.request.file && n.index === r.request.index;
+                return (n?.kind === "request" || n?.kind === "title") && n.file === r.request.file && n.index === r.request.index ? n : null;
               };
-              const current = r.request.name ?? "";
               return (
                 <If
-                  when={!renaming()}
+                  when={!editing()}
                   else={
-                    <NameInput
-                      initial={current}
-                      placeholder="请求名（# @name）"
-                      onDone={(name) => {
-                        if (name && name !== current) renameRequest(r.request.file, r.request.index, name);
-                        else naming.set(null);
-                        afterNaming(r.request.index);
-                      }}
-                    />
+                    <If
+                      when={editing()?.kind === "title"}
+                      else={
+                        <NameInput
+                          initial={r.request.name ?? ""}
+                          placeholder="请求名（# @name），引用时用：不能有空格"
+                          onDone={(name) => {
+                            if (name && name !== (r.request.name ?? "")) renameRequest(r.request.file, r.request.index, name);
+                            else naming.set(null);
+                            afterNaming(r.request.index);
+                          }}
+                        />
+                      }
+                    >
+                      <NameInput
+                        initial={r.request.title ?? ""}
+                        placeholder="标题，写什么都行"
+                        onDone={(title) => {
+                          const fresh = (editing() as { fresh?: boolean } | null)?.fresh ?? false;
+                          if (title !== null && title !== (r.request.title ?? "")) setTitle(r.request.file, r.request.index, title, fresh);
+                          else naming.set(null);
+                          afterNaming(r.request.index);
+                        }}
+                      />
+                    </If>
                   }
                 >
                 <View
                   onContextMenu={(e) => requestMenu(r.request, e.pagePosition)}
                   role="button"
-                  accessibilityLabel={`${r.request.method} ${r.request.name ?? r.request.id}`}
+                  accessibilityLabel={`${r.request.method} ${requestLabel(r.request)}`}
                   onPress={() => selectRequest(r.request)}
                   class={`h-7 flex-row items-center gap-1.5 rounded-md pr-2 ${active() ? "border border-list-active-border bg-list-active" : "hover:bg-list-hover"}`}
                   style={{ paddingLeft: pad }}
                 >
                   <Method method={r.request.method} />
-                  <Text class="flex-1 text-[13px] text-foreground" style={{ numberOfLines: 1 }}>
-                    {r.request.name ?? r.request.title ?? r.request.id}
+                  <Text class="shrink text-[13px] text-foreground" style={{ numberOfLines: 1 }}>
+                    {requestLabel(r.request)}
                   </Text>
+                  <If when={r.request.title && r.request.name}>
+                    <Text class="flex-1 font-mono text-[11px] text-muted-foreground" style={{ numberOfLines: 1 }}>{r.request.name!}</Text>
+                  </If>
+                  <If when={!(r.request.title && r.request.name)}>
+                    <View class="flex-1" />
+                  </If>
                 </View>
                 </If>
               );
@@ -200,7 +224,9 @@ export function Sidebar() {
 function requestMenu(r: RequestRef, at: { x: number; y: number }) {
   Menu.popup(
     [
-      { label: "重命名…", onSelect: () => (selectRequest(r), naming.set({ kind: "request", file: r.file, index: r.index })) },
+      // Not selecting it: that moves the editor's caret, which takes the focus from the name field.
+      { label: "重命名…", onSelect: () => naming.set({ kind: "title", file: r.file, index: r.index }) },
+      { label: "修改请求名（@name）…", onSelect: () => naming.set({ kind: "request", file: r.file, index: r.index }) },
       { label: "复制为 curl", onSelect: () => (selectRequest(r), copyCurl()) },
     ],
     at,

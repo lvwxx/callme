@@ -282,6 +282,16 @@ impl Callme {
         serde_json::to_string(&service::env_file_diagnostics(&project, &file, &text)).unwrap()
     }
 
+    /// `.http` text with request `index`'s title (after its `###`) set to `title`.
+    pub fn set_title(text: String, index: u32, title: String) -> Result<String, String> {
+        lang::set_title(&text, index as usize, &title)
+    }
+
+    /// A request name (`# @name`) made from a title: `agent 列表` → `agent-列表`.
+    pub fn name_from_title(title: String) -> String {
+        lang::name_from_title(&title)
+    }
+
     /// Names request `index` of `file` (its text, unsaved, is `text`) `name`; resolves with the file's new text.
     /// References to its old name follow: in the file, and in the project's other files when no other request
     /// has that name.

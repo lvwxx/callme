@@ -98,7 +98,13 @@ export function openProject(path: string) {
 }
 
 /** Which name is being typed in the sidebar: a new file, or a new name for a file. */
-export const naming = signal<{ kind: "create" } | { kind: "rename"; file: string } | { kind: "request"; file: string; index: number } | null>(null);
+export const naming = signal<
+  | { kind: "create" }
+  | { kind: "rename"; file: string }
+  | { kind: "request"; file: string; index: number }
+  | { kind: "title"; file: string; index: number; fresh?: boolean }
+  | null
+>(null);
 
 /** Whether the environment view is asking for a new environment's name. */
 export const creatingEnv = signal(false);
@@ -149,6 +155,25 @@ export function renameRequest(file: string, index: number, name: string) {
   try {
     if (file !== activeFile()) openFile(file);
     const next = api.renameRequest(file, text(), index, name);
+    naming.set(null);
+    text.set(next);
+    saveNow();
+  } catch (e) {
+    notice.set(apiError(e).message);
+  }
+}
+
+/** Titles request `index` of `file`. A fresh request also takes a name made from the title, when it is free. */
+export function setTitle(file: string, index: number, title: string, fresh = false) {
+  try {
+    if (file !== activeFile()) openFile(file);
+    let next = api.setTitle(text(), index, title);
+    const name = fresh ? api.nameFromTitle(title) : "";
+    if (name && !requests().some((r) => r.name === name)) {
+      try {
+        next = api.renameRequest(file, next, index, name);
+      } catch {}
+    }
     naming.set(null);
     text.set(next);
     saveNow();
@@ -319,7 +344,7 @@ export function newRequest() {
   cursorLine.set(line);
   const added = requests().filter((r) => r.file === activeFile()).length;
   // Name it first; the caret goes to the end of its URL once the name is set (`afterNaming`).
-  naming.set({ kind: "request", file: activeFile(), index: added });
+  naming.set({ kind: "title", file: activeFile(), index: added, fresh: true });
 }
 
 /** After a request was named: the caret at the end of its URL, the editor focused. */

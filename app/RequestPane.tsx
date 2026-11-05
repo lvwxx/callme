@@ -2,7 +2,7 @@
 // send), and the `.http` editor with callme's highlighting, completion, hover cards, diagnostics and folds.
 import { type Bounds, computed, Overlay, signal, Text, View } from "nsh";
 import { Editor, type EditorDecoration, type EditorDiagnostic } from "nsh/base";
-import { api, type Hover } from "./api";
+import { api, requestLabel, type Hover } from "./api";
 import { Icon } from "./icons";
 import {
   activeFile,
@@ -67,7 +67,9 @@ function RequestBar() {
     <View class="h-11 flex-row items-center gap-1 border-b border-border pl-3 pr-2">
       <If when={p() && "url" in p()!} else={<Text class="flex-1 text-xs text-status-err" style={{ numberOfLines: 1 }}>{p() && "message" in p()! ? (p() as { message: string }).message : "光标不在任何请求里"}</Text>}>
         <Method method={(p() as { method: string }).method} class="w-auto text-xs" />
-        <Text class="ml-1 text-[13px] font-semibold text-foreground">{currentRequest()?.name ?? `#${currentIndex()}`}</Text>
+        <Text class="ml-1 text-[13px] font-semibold text-foreground" style={{ numberOfLines: 1 }}>
+          {currentRequest() ? requestLabel(currentRequest()!) : `#${currentIndex()}`}
+        </Text>
         <Text class="ml-2 flex-1 font-mono text-xs text-muted-foreground" style={{ numberOfLines: 1 }}>{(p() as { url: string }).url}</Text>
       </If>
       <IconButton icon="plus" label="新建请求" shortcut="⌘N" onPress={newRequest} />

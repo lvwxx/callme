@@ -107,8 +107,8 @@ const items = computed<Item[]>(() => {
         out.push({
           key: `r:${r.file}#${r.id}`,
           section: "请求",
-          label: r.name ?? r.title ?? r.id,
-          detail: `${r.file} · ${r.url}`,
+          label: r.title || r.name || r.id,
+          detail: `${r.name ? `${r.name} · ` : ""}${r.file} · ${r.url}`,
           method: r.method,
           run: () => (selectRequest(r), close()),
         });
