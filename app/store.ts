@@ -98,7 +98,7 @@ export function openProject(path: string) {
 }
 
 /** Which name is being typed in the sidebar: a new file, or a new name for a file. */
-export const naming = signal<{ kind: "create" } | { kind: "rename"; file: string } | null>(null);
+export const naming = signal<{ kind: "create" } | { kind: "rename"; file: string } | { kind: "request"; file: string; index: number } | null>(null);
 
 /** Whether the environment view is asking for a new environment's name. */
 export const creatingEnv = signal(false);
@@ -139,6 +139,19 @@ export async function trashFile(file: string) {
     saved.delete(file);
     refresh();
     notice.set(`已把 ${file} 移到废纸篓`);
+  } catch (e) {
+    notice.set(apiError(e).message);
+  }
+}
+
+/** Names request `index` of `file`, the references to its old name following. */
+export function renameRequest(file: string, index: number, name: string) {
+  try {
+    if (file !== activeFile()) openFile(file);
+    const next = api.renameRequest(file, text(), index, name);
+    naming.set(null);
+    text.set(next);
+    saveNow();
   } catch (e) {
     notice.set(apiError(e).message);
   }
@@ -304,8 +317,20 @@ export function newRequest() {
   saveNow();
   const line = next.split("\n").length - 3;
   cursorLine.set(line);
-  setTimeout(() => editor.ref?.setSelections([{ anchor: { line, column: 21 }, head: { line, column: 21 } }]), 0);
-  setTimeout(() => editor.ref?.focus(), 0);
+  const added = requests().filter((r) => r.file === activeFile()).length;
+  // Name it first; the caret goes to the end of its URL once the name is set (`afterNaming`).
+  naming.set({ kind: "request", file: activeFile(), index: added });
+}
+
+/** After a request was named: the caret at the end of its URL, the editor focused. */
+export function afterNaming(index: number) {
+  setTimeout(() => {
+    const line = api.requestLine(text(), index);
+    const col = text().split("\n")[line]?.length ?? 0;
+    cursorLine.set(line);
+    editor.ref?.setSelections([{ anchor: { line, column: col }, head: { line, column: col } }]);
+    editor.ref?.focus();
+  }, 0);
 }
 
 /** Goes to a definition: a line of an environment file in the environment view, else a line of a `.http` file. */

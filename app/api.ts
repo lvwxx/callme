@@ -81,6 +81,7 @@ export const api = {
   jsonFolds: (text: string): Fold[] => JSON.parse(Callme.jsonFolds(text)),
   variables: (text: string): Span[] => JSON.parse(Callme.variables(text)),
   requestAt: (text: string, line: number) => Callme.requestAt(text, line),
+  renameRequest: (file: string, text: string, index: number, name: string) => Callme.renameRequest(root(), file, text, index, name),
   formatBody: (text: string, index: number): string | null => Callme.formatBody(text, index),
   requestLine: (text: string, index: number) => Callme.requestLine(text, index),
   gitignoreMissing: (): string[] => JSON.parse(Callme.gitignoreMissing(root())),

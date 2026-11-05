@@ -60,6 +60,9 @@ test("adds a request to the open file", async () => {
   const app = await open("./App.tsx", { width: 1280, height: 800 });
   await app.press("label:新建请求");
   await app.waitFor("text:# @name request", { timeout: 5_000 });
+  // Return keeps the name it was given (headless, the field takes the keys once typed into).
+  await app.type("id:name-input", "");
+  await app.keyboard.press("enter");
   await app.waitFor("label:GET request", { timeout: 5_000 });
   expect(Callme.read(Callme.root(), "api.http")).toContain("# @name request");
 });
@@ -153,4 +156,28 @@ test("folds and unfolds a file's requests", async () => {
   await app.press("label:收起 api.http");
   await app.waitUntil(() => !app.texts().includes("stream"), { timeout: 3_000 });
   await app.press("label:展开 api.http");
+});
+
+test("renames a request and the references to it", async () => {
+  const app = await open("./App.tsx", { width: 1280, height: 800, platform: "macos" });
+  await app.rightClick("label:GET token");
+  await app.chooseMenuItem("重命名…");
+  await app.clear("id:name-input");
+  await app.type("id:name-input", "auth");
+  await app.keyboard.press("enter");
+  await app.waitFor("label:GET auth", { timeout: 5_000 });
+  const text = Callme.read(Callme.root(), "api.http");
+  expect(text).toContain("# @name auth");
+  expect(text).toContain("{{auth.response.body.$.user.id}}");
+  expect(text).not.toContain("token.response");
+});
+
+test("names a new request as it is added", async () => {
+  const app = await open("./App.tsx", { width: 1280, height: 800 });
+  await app.press("label:新建请求");
+  await app.waitFor("id:name-input", { timeout: 5_000 });
+  await app.clear("id:name-input");
+  await app.type("id:name-input", "agents");
+  await app.keyboard.press("enter");
+  await app.waitFor("label:GET agents", { timeout: 5_000 });
 });

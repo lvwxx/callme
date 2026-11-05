@@ -443,6 +443,46 @@ pub fn format_body(text: &str, index: usize) -> Result<Option<String>, String> {
     Ok(Some(out.join("\n")))
 }
 
+/// `text` with request `index` named `name`: its `# @name` line rewritten, or one added above its request line.
+pub fn rename_request(text: &str, index: usize, name: &str) -> Result<String, String> {
+    let name = name.trim();
+    if name.is_empty() || name.contains(|c: char| c.is_whitespace() || c == '.' || c == '#' || c == '{' || c == '}') {
+        return Err("请求名不能为空，也不能包含空格、`.`、`#`、`{`、`}`".into());
+    }
+    let parsed = crate::parse::parse(text);
+    let r = parsed.requests.iter().find(|r| r.index == index).ok_or("没有这个请求")?;
+    if parsed.requests.iter().any(|o| o.index != index && o.name.as_deref() == Some(name)) {
+        return Err(format!("这个文件里已经有名为 `{name}` 的请求"));
+    }
+    let mut lines: Vec<String> = text.split('\n').map(str::to_string).collect();
+    let named = (r.start_line..r.request_line).find(|&l| {
+        comment(&lines[l]).is_some() && lines[l].trim_start().trim_start_matches('#').trim_start_matches("//").trim_start().starts_with("@name")
+    });
+    match named {
+        Some(l) => {
+            let prefix = if lines[l].trim_start().starts_with("//") { "//" } else { "#" };
+            lines[l] = format!("{prefix} @name {name}");
+        }
+        None => lines.insert(r.request_line, format!("# @name {name}")),
+    }
+    Ok(lines.join("\n"))
+}
+
+/// `text` with the response references to request `old` (`{{old.response.…}}`) pointing at `new`.
+pub fn rename_references(text: &str, old: &str, new: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut last = 0;
+    for (range, expr) in crate::resolve::references(text) {
+        if let Some(rest) = expr.strip_prefix(old).and_then(|r| r.strip_prefix(".response.")) {
+            out.push_str(&text[last..range.start]);
+            out.push_str(&format!("{{{{{new}.response.{rest}}}}}"));
+            last = range.end;
+        }
+    }
+    out.push_str(&text[last..]);
+    out
+}
+
 /// Common request headers and values offered for them.
 pub const HEADERS: &[(&str, &[&str])] = &[
     ("Accept", &["application/json", "*/*", "text/event-stream", "text/html", "application/xml"]),
@@ -491,6 +531,20 @@ mod tests {
         );
         assert_eq!(format_body(t, 2).unwrap(), None, "no body");
         assert!(format_body("POST /a\n\n{oops", 1).is_err());
+    }
+
+    #[test]
+    fn renames_requests_and_their_references() {
+        let t = "### a\n# @name request2\nGET /a\n\n### b\nGET /b?t={{request2.response.body.$.t}}\n";
+        assert_eq!(rename_request(t, 1, "agents").unwrap(), t.replace("# @name request2", "# @name agents"));
+        assert_eq!(rename_request(t, 2, "b").unwrap(), t.replace("### b\nGET", "### b\n# @name b\nGET"));
+        assert!(rename_request(t, 2, "request2").is_err(), "taken");
+        assert!(rename_request(t, 1, "a b").is_err());
+        assert_eq!(
+            rename_references(t, "request2", "agents"),
+            t.replace("{{request2.response.body.$.t}}", "{{agents.response.body.$.t}}")
+        );
+        assert_eq!(rename_references("{{request22.response.body}} {{request2}}", "request2", "x"), "{{request22.response.body}} {{request2}}");
     }
 
     #[test]

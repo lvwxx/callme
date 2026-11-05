@@ -282,6 +282,31 @@ impl Callme {
         serde_json::to_string(&service::env_file_diagnostics(&project, &file, &text)).unwrap()
     }
 
+    /// Names request `index` of `file` (its text, unsaved, is `text`) `name`; resolves with the file's new text.
+    /// References to its old name follow: in the file, and in the project's other files when no other request
+    /// has that name.
+    pub fn rename_request(root: String, file: String, text: String, index: u32, name: String) -> Result<String, String> {
+        let project = Project { root: root.into() };
+        let old = callme_core::parse::parse(&text).requests.into_iter().find(|r| r.index == index as usize).and_then(|r| r.name);
+        let mut next = lang::rename_request(&text, index as usize, &name)?;
+        if let Some(old) = old {
+            let name = name.trim();
+            next = lang::rename_references(&next, &old, name);
+            let elsewhere = project.list().unwrap_or_default().into_iter().filter(|r| r.name.as_deref() == Some(&old) && r.file != file).count();
+            if elsewhere == 0 {
+                for f in project.http_files().into_iter().filter(|f| *f != file) {
+                    let path = project.root.join(&f);
+                    let Ok(t) = std::fs::read_to_string(&path) else { continue };
+                    let changed = lang::rename_references(&t, &old, name);
+                    if changed != t {
+                        std::fs::write(&path, changed).map_err(|e| format!("改 {f} 里的引用失败：{e}"))?;
+                    }
+                }
+            }
+        }
+        Ok(next)
+    }
+
     /// `.http` text with request `index`'s JSON body pretty-printed; null when it has no body to format.
     pub fn format_body(text: String, index: u32) -> Result<Option<String>, String> {
         lang::format_body(&text, index as usize)

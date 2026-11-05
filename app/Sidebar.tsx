@@ -15,6 +15,9 @@ import {
   openFile,
   recent,
   renameFile,
+  renameRequest,
+  copyCurl,
+  afterNaming,
   requests,
   saveNow,
   selectRequest,
@@ -97,8 +100,28 @@ export function Sidebar() {
             const pad = 8 + r.depth * 14 + (r.kind === "folder" ? 0 : 14);
             if (r.kind === "request") {
               const active = () => view() === "request" && activeFile() === r.request.file && currentIndex() === r.request.index;
+              const renaming = () => {
+                const n = naming();
+                return n?.kind === "request" && n.file === r.request.file && n.index === r.request.index;
+              };
+              const current = r.request.name ?? "";
               return (
+                <If
+                  when={!renaming()}
+                  else={
+                    <NameInput
+                      initial={current}
+                      placeholder="请求名（# @name）"
+                      onDone={(name) => {
+                        if (name && name !== current) renameRequest(r.request.file, r.request.index, name);
+                        else naming.set(null);
+                        afterNaming(r.request.index);
+                      }}
+                    />
+                  }
+                >
                 <View
+                  onContextMenu={(e) => requestMenu(r.request, e.pagePosition)}
                   role="button"
                   accessibilityLabel={`${r.request.method} ${r.request.name ?? r.request.id}`}
                   onPress={() => selectRequest(r.request)}
@@ -110,6 +133,7 @@ export function Sidebar() {
                     {r.request.name ?? r.request.title ?? r.request.id}
                   </Text>
                 </View>
+                </If>
               );
             }
             const renaming = () => {
@@ -170,6 +194,16 @@ export function Sidebar() {
         </View>
       </If>
     </View>
+  );
+}
+
+function requestMenu(r: RequestRef, at: { x: number; y: number }) {
+  Menu.popup(
+    [
+      { label: "重命名…", onSelect: () => (selectRequest(r), naming.set({ kind: "request", file: r.file, index: r.index })) },
+      { label: "复制为 curl", onSelect: () => (selectRequest(r), copyCurl()) },
+    ],
+    at,
   );
 }
 
