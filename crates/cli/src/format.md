@@ -31,7 +31,7 @@ Authorization: Bearer {{login.response.body.$.token}}
 | `# @name login` | 给请求命名（文件内唯一，不能有空格、`.`、`#`） |
 | `# @no-redirect` | 不跟随重定向 |
 | `# @no-cookie-jar` | 不读写 cookie（默认会保存在 .callme/cookies.txt） |
-| `# @timeout 5` | 超时秒数，默认 30 |
+| `# @timeout 5` | 超时秒数，默认 30；SSE 流开始后不受限制，在 app 里可以随时停止 |
 | `# @insecure` | 忽略 TLS 证书错误 |
 
 ## 变量

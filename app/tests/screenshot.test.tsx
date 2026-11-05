@@ -16,8 +16,14 @@ test("screenshots", async () => {
   await app.hover("label:curl 命令");
   await app.wait(900);
   await app.screenshot("screenshots/2b-tooltip.png");
+  await app.hover("label:GET 依赖：用到 token 的响应");
+  await app.wait(1200);
+  await app.screenshot("screenshots/2c-row-tip.png");
+  await app.hover("text:请求");
   await app.press("label:GET 流式");
   await app.press("text:发送");
+  await app.waitFor('text:{"i":0,"t":"你"}', { timeout: 10_000 });
+  await app.screenshot("screenshots/3a-streaming.png");
   await app.waitFor("text:[DONE]", { timeout: 10_000 });
   await app.wait(500);
   await app.screenshot("screenshots/3-sse.png");

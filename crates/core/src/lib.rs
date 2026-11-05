@@ -36,6 +36,8 @@ pub enum RequestErrorKind {
     Network,
     Timeout,
     Tls,
+    /// Stopped by the user before a response arrived.
+    Cancelled,
 }
 
 impl Error {
@@ -48,6 +50,7 @@ impl Error {
             Error::Request { kind: RequestErrorKind::Network, .. } => "network",
             Error::Request { kind: RequestErrorKind::Timeout, .. } => "timeout",
             Error::Request { kind: RequestErrorKind::Tls, .. } => "tls",
+            Error::Request { kind: RequestErrorKind::Cancelled, .. } => "cancelled",
         }
     }
 

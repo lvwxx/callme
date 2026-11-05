@@ -1,9 +1,10 @@
 // The environment view: the two environment files edited as text, and the variables an environment ends up with,
 // with where each comes from (secrets masked). Read-only on the right: the files are the source.
 import { computed, signal, Text, View, Scroll } from "nsh";
-import { Editor, Input } from "nsh/base";
+import { Editor, Input, ResizablePanel, ResizablePanelGroup } from "nsh/base";
 import { api } from "./api";
 import { Icon } from "./icons";
+import { HANDLE, layout, resized } from "./layout";
 import { addEnv, creatingEnv, editor, env, envState, envTab, reloadEnv, settled } from "./store";
 import { Button } from "./ui";
 import { Tabs } from "./ui";
@@ -53,8 +54,8 @@ export function EnvPane() {
     }
   });
   return (
-    <View class="min-w-0 flex-1 flex-row">
-      <View class="min-w-0 flex-1 bg-background">
+    <ResizablePanelGroup axis="horizontal" handleClass={HANDLE} handleAccessibilityLabel="调整栏宽">
+      <ResizablePanel minSize={320} class="bg-background">
         <View class="h-9 flex-row border-b border-border bg-tab-bar">
           <Each of={["public", "private"] as const}>
             {(t) => (
@@ -113,8 +114,8 @@ export function EnvPane() {
             </Each>
           </View>
         </If>
-      </View>
-      <View class="w-[500px] border-l border-border bg-panel">
+      </ResizablePanel>
+      <ResizablePanel size={layout().response} minSize={300} fixed onResize={({ size }) => resized("response", size)} class="bg-panel">
         <View class="h-11 flex-row items-center gap-2.5 border-b border-border px-3">
           <Text class="flex-1 text-[13px] font-semibold text-foreground">生效变量</Text>
           <View class="flex-row gap-0.5 rounded-md bg-tab-bar p-0.5">
@@ -155,8 +156,8 @@ export function EnvPane() {
           <Text class="text-[11px] text-muted-foreground">私有文件里的值是密钥：这里显示为 ••••••，CLI 和 MCP 输出时显示为 ***。</Text>
           <Text class="text-[11px] text-muted-foreground">请确认 .gitignore 里有 http-client.private.env.json。</Text>
         </View>
-      </View>
-    </View>
+      </ResizablePanel>
+    </ResizablePanelGroup>
   );
 }
 

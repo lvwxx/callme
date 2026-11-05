@@ -81,11 +81,11 @@ The MCP server offers `list_requests`, `run_request`, `get_history` and `list_en
 - **Editor**: highlighting, completion of headers, variables and request names, hover cards with a variable's value in
   each environment, diagnostics (undefined variables, unknown requests, bad JSON), ⌘-click to go to a definition,
   folding by request.
-- **Response**: JSON folded by its structure, JSONPath filter, server-sent events as they arrive, headers, the time of
+- **Response**: JSON folded by its structure, JSONPath filter, server-sent events as they arrive (a stream runs until it ends or you stop it, keeping what arrived), headers, the time of
   each phase, history.
 - **⌘K palette**: requests and commands; paste a curl command and it becomes a request, its base URL and secrets
   replaced by the variables that hold them.
-- **Shortcuts**: ⌘↵ send, ⌘N new request, ⌘⇧F format the JSON body, ⌘/ comment out a line, ⌘⇧C copy as curl,
+- **Shortcuts**: ⌘↵ send (in the palette: send the selected request), ⌘. stop, ⌘N new request, ⌘⇧F format the JSON body, ⌘/ comment out a line, ⌘⇧C copy as curl,
   ⌘O open a folder.
 - Files save as you type and reload when something else (an agent) changes them.
 

@@ -3,7 +3,10 @@
 //! blocking thread with libcurl; what arrives while they run (each response head, server-sent events) is posted to
 //! the TSX callback as JSON.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 
 use callme_core::exec::Watcher;
@@ -84,13 +87,21 @@ fn editor_token(t: Token) -> EditorToken {
     }
 }
 
+/// The stop flags of the runs going on, by the token `run` was given; `stop` raises one.
+static STOPS: LazyLock<Mutex<HashMap<String, Arc<AtomicBool>>>> = LazyLock::new(Default::default);
+
 /// Forwards what arrives during a run to the engine thread as JSON messages.
 struct Forward {
     tx: tokio::sync::mpsc::UnboundedSender<String>,
     sse: Option<SseDecoder>,
+    stop: Arc<AtomicBool>,
 }
 
 impl Watcher for Forward {
+    fn stopped(&self) -> bool {
+        self.stop.load(Ordering::Relaxed)
+    }
+
     fn head(&mut self, status: u16, headers: &[(String, String)]) {
         let streaming = headers
             .iter()
@@ -220,17 +231,21 @@ impl Callme {
     /// Runs request `id` of `file` (its only one when none) in environment `env` (the current one when none);
     /// resolves with the run's JSON. `onEvent` hears JSON messages as the response arrives:
     /// `{ type: "head", status, headers, streaming }` and `{ type: "event", event }` for each server-sent event.
+    /// `stop(token)` stops it: a response that has begun ends with what arrived, else the run fails as `cancelled`.
     pub async fn run(
         root: String,
         file: String,
         id: Option<String>,
         env: Option<String>,
+        token: String,
         #[args(message)] on_event: Callback<String>,
     ) -> Result<String, String> {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+        let stop = Arc::new(AtomicBool::new(false));
+        STOPS.lock().unwrap().insert(token.clone(), stop.clone());
         let job = blocking(move || {
             let project = Project { root: root.into() };
-            let mut forward = Forward { tx, sse: None };
+            let mut forward = Forward { tx, sse: None, stop };
             let result = run::run(&project, &file, id.as_deref(), RunOptions { env, overrides: vec![], on_chunk: Some(&mut forward) });
             result
                 .map(|r| output::record_json(&r.record, Some(&r.raw_body), Some(&r.history_file), MAX_BODY).to_string())
@@ -239,7 +254,16 @@ impl Callme {
         while let Some(message) = rx.recv().await {
             on_event.post(message);
         }
-        job.await.map_err(|e| json!({ "error": { "kind": "internal", "message": e.to_string() } }).to_string())?
+        let result = job.await;
+        STOPS.lock().unwrap().remove(&token);
+        result.map_err(|e| json!({ "error": { "kind": "internal", "message": e.to_string() } }).to_string())?
+    }
+
+    /// Stops the run given `token`, if it is still going.
+    pub fn stop(token: String) {
+        if let Some(flag) = STOPS.lock().unwrap().get(&token) {
+            flag.store(true, Ordering::Relaxed);
+        }
     }
 
     /// Diagnostics of `.http` text `text` (file `file`) in environment `env` (the current one when none), as JSON

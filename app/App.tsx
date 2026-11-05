@@ -1,12 +1,13 @@
 // callme: a simple, AI-friendly API client for .http files. The title bar, the sidebar, the request and response
 // panes (or the environment view), a status bar, and the command palette over them.
-import { computed, effect, keymap, mount, signal, Storage, Text, View } from "nsh";
+import { computed, effect, keymap, mount, signal, Text, View } from "nsh";
 import { ResizablePanel, ResizablePanelGroup } from "nsh/base";
 import { isAvailable as hasWindow, Menu, Window } from "nsh/desktop";
 import { Callme } from "callme/native";
 import { api, project } from "./api";
 import { EnvPane } from "./EnvPane";
-import { Palette } from "./Palette";
+import { HANDLE, layout, resized } from "./layout";
+import { Palette, sendSelected } from "./Palette";
 import { RequestPane } from "./RequestPane";
 import { clearPicked, ResponsePane } from "./ResponsePane";
 import { Sidebar } from "./Sidebar";
@@ -28,6 +29,7 @@ import {
   saveNow,
   selectRequest,
   send,
+  stop,
   view,
 } from "./store";
 import { TitleBar } from "./TitleBar";
@@ -48,6 +50,7 @@ if (hasWindow) {
         { label: "打开文件夹…", shortcut: "mod+o", onSelect: pickProject },
         { type: "separator" },
         { label: "发送", shortcut: "mod+enter", onSelect: () => send() },
+        { label: "停止", shortcut: "mod+.", onSelect: stop },
         { label: "复制为 curl", shortcut: "mod+shift+c", onSelect: copyCurl },
         { label: "格式化 JSON 请求体", shortcut: "mod+shift+f", onSelect: formatBody },
         { label: "保存", shortcut: "mod+s", onSelect: saveNow },
@@ -63,7 +66,8 @@ if (hasWindow) {
 
 keymap.bind(
   {
-    "mod+enter": () => send(),
+    "mod+enter": () => (paletteOpen() ? void sendSelected() : void send()),
+    "mod+.": () => stop(),
     "mod+k": () => paletteOpen.set(!paletteOpen()),
     "mod+n": () => newRequest(),
     "mod+shift+f": () => formatBody(),
@@ -131,21 +135,6 @@ function Welcome() {
   );
 }
 
-/** The widths of the sidebar and the response, as the user last dragged them. */
-const LAYOUT_KEY = "layout";
-const layout = signal({ sidebar: 248, response: 500 });
-void Storage.getItem(LAYOUT_KEY).then((saved) => {
-  try {
-    const value = saved ? JSON.parse(saved) : null;
-    if (value && typeof value.sidebar === "number" && typeof value.response === "number") layout.set(value);
-  } catch {}
-});
-function resized(panel: "sidebar" | "response", size: number) {
-  const next = { ...layout(), [panel]: Math.round(size) };
-  layout.set(next);
-  void Storage.setItem(LAYOUT_KEY, JSON.stringify(next));
-}
-
 function App() {
   // A picked history record belongs to the request it was picked for.
   effect(() => {
@@ -159,7 +148,7 @@ function App() {
         <View class="min-h-0 flex-1">
           <ResizablePanelGroup
             axis="horizontal"
-            handleClass="bg-border group-hover:bg-muted-foreground group-active:bg-brand"
+            handleClass={HANDLE}
             handleAccessibilityLabel="调整栏宽"
           >
             <ResizablePanel

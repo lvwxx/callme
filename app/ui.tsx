@@ -33,9 +33,9 @@ export function SectionLabel(props: { children: JSX.Element }) {
 }
 
 /** The hint an icon button shows when the pointer rests on it: its name, and its shortcut. */
-export function Tip(props: { label: string; shortcut?: string }) {
+export function Tip(props: { label: string; shortcut?: string; placement?: "top" | "bottom" | "left" | "right"; delay?: number }) {
   return (
-    <Tooltip class="flex-row items-center gap-2 rounded-md bg-foreground px-2 py-1">
+    <Tooltip placement={props.placement} delay={props.delay} class="flex-row items-center gap-2 rounded-md bg-foreground px-2 py-1">
       <Text class="text-xs text-background">{props.label}</Text>
       <If when={props.shortcut}>
         <Text class="font-mono text-[11px] text-background opacity-60">{props.shortcut!}</Text>
@@ -59,23 +59,42 @@ export function IconButton(props: { icon: IconName; label: string; shortcut?: st
   );
 }
 
-/** The one filled button of the request bar. */
-export function SendButton(props: { running: boolean; disabled: boolean; onPress: () => void }) {
-  const off = () => props.disabled || props.running;
+/** The one filled button of the request bar: 发送, and 停止 while the request runs. */
+export function SendButton(props: { running: boolean; disabled: boolean; onPress: () => void; onStop: () => void }) {
   return (
-    <View
-      role="button"
-      accessibilityLabel={props.running ? "发送中" : "发送"}
-      onPress={() => !off() && props.onPress()}
-      tooltip={<Tip label="发送当前请求" shortcut="⌘↵" />}
-      class={`h-7 flex-row items-center gap-2 rounded-md pl-3 pr-2.5 ${off() ? "bg-muted" : "bg-brand hover:opacity-90 active:opacity-80"}`}
+    <If
+      when={props.running}
+      else={
+        <View
+          role="button"
+          accessibilityLabel="发送"
+          accessibilityState={{ disabled: props.disabled }}
+          onPress={() => !props.disabled && props.onPress()}
+          tooltip={<Tip label="发送当前请求" shortcut="⌘↵" />}
+          class={`h-7 flex-row items-center gap-2 rounded-md pl-3 pr-2.5 ${props.disabled ? "bg-muted" : "bg-brand hover:opacity-90 active:opacity-80"}`}
+        >
+          <Icon name="play" size={12} color={props.disabled ? "muted-foreground" : "#0a0e19"} />
+          <Text class={`text-[13px] font-semibold ${props.disabled ? "text-muted-foreground" : "text-[#0a0e19]"}`}>发送</Text>
+          <View class={`rounded px-1 ${props.disabled ? "" : "bg-[#0a0e1914]"}`}>
+            <Text class={`font-mono text-[11px] ${props.disabled ? "text-muted-foreground" : "text-[#0a0e19]"}`}>⌘↵</Text>
+          </View>
+        </View>
+      }
     >
-      <Icon name="play" size={12} color={off() ? "muted-foreground" : "#0a0e19"} />
-      <Text class={`text-[13px] font-semibold ${off() ? "text-muted-foreground" : "text-[#0a0e19]"}`}>{props.running ? "发送中" : "发送"}</Text>
-      <View class={`rounded px-1 ${off() ? "" : "bg-[#0a0e1914]"}`}>
-        <Text class={`font-mono text-[11px] ${off() ? "text-muted-foreground" : "text-[#0a0e19]"}`}>⌘↵</Text>
+      <View
+        role="button"
+        accessibilityLabel="停止"
+        onPress={props.onStop}
+        tooltip={<Tip label="停止这个请求，保留已收到的内容" shortcut="⌘." />}
+        class="h-7 flex-row items-center gap-2 rounded-md border border-border bg-background pl-3 pr-2.5 hover:bg-list-hover active:bg-list-active"
+      >
+        <Icon name="stop" size={12} color="foreground" />
+        <Text class="text-[13px] font-semibold text-foreground">停止</Text>
+        <View class="rounded bg-muted px-1">
+          <Text class="font-mono text-[11px] text-muted-foreground">⌘.</Text>
+        </View>
       </View>
-    </View>
+    </If>
   );
 }
 

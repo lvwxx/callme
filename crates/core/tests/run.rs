@@ -51,6 +51,17 @@ fn handle(mut stream: TcpStream) {
     let path = parts.next().unwrap().to_string();
     let header = |n: &str| headers.iter().find(|(k, _)| k == n).map(|(_, v)| v.clone()).unwrap_or_default();
 
+    if path == "/stream" {
+        // Events for 1.5 seconds, longer than the requests' timeouts.
+        let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n");
+        for i in 0..6 {
+            if stream.write_all(format!("data: {i}\n\n").as_bytes()).is_err() {
+                return;
+            }
+            thread::sleep(Duration::from_millis(250));
+        }
+        return;
+    }
     let (status, extra, ctype, out): (&str, String, &str, String) = match path.as_str() {
         "/echo" => {
             let echo = serde_json::json!({
@@ -124,6 +135,11 @@ GET {{baseUrl}}/slow
 ###
 # @name sse
 GET {{baseUrl}}/sse
+
+###
+# @name stream
+# @timeout 0.3
+GET {{baseUrl}}/stream
 
 ###
 # @name missing
@@ -201,4 +217,53 @@ fn connection_refused_is_a_network_error() {
     let (_d, p) = project("http://127.0.0.1:9");
     let err = go(&p, "login").err().unwrap();
     assert_eq!(err.kind(), "network");
+}
+
+#[test]
+fn a_stream_of_events_outlasts_the_timeout() {
+    let base = serve();
+    let (_d, p) = project(&base);
+    let r = go(&p, "stream").unwrap();
+    assert_eq!(r.record.response.status, 200);
+    assert!(String::from_utf8_lossy(&r.raw_body).contains("data: 5"));
+}
+
+/// Stops the request once it has seen `after` chunks of the body (0: before any response).
+struct StopAfter {
+    after: usize,
+    seen: usize,
+    started: std::time::Instant,
+}
+
+impl callme_core::exec::Watcher for StopAfter {
+    fn chunk(&mut self, _data: &[u8]) {
+        self.seen += 1;
+    }
+    fn stopped(&self) -> bool {
+        self.seen >= self.after && self.started.elapsed() > Duration::from_millis(100)
+    }
+}
+
+#[test]
+fn stopping_a_stream_keeps_what_arrived() {
+    let base = serve();
+    let (_d, p) = project(&base);
+    let mut stop = StopAfter { after: 1, seen: 0, started: std::time::Instant::now() };
+    let opts = RunOptions { env: Some("dev".into()), on_chunk: Some(&mut stop), ..Default::default() };
+    let started = std::time::Instant::now();
+    let r = run(&p, "api.http", Some("stream"), opts).unwrap();
+    assert!(started.elapsed() < Duration::from_millis(1400), "stopped early");
+    assert_eq!(r.record.response.status, 200);
+    let body = String::from_utf8_lossy(&r.raw_body).to_string();
+    assert!(body.contains("data: 0") && !body.contains("data: 5"), "{body}");
+}
+
+#[test]
+fn stopping_before_a_response_is_cancelled() {
+    let base = serve();
+    let (_d, p) = project(&base);
+    let mut stop = StopAfter { after: 0, seen: 0, started: std::time::Instant::now() };
+    let opts = RunOptions { env: Some("dev".into()), on_chunk: Some(&mut stop), ..Default::default() };
+    let e = run(&p, "api.http", Some("slow"), opts).err().unwrap();
+    assert_eq!(e.kind(), "cancelled");
 }

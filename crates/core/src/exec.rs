@@ -2,7 +2,7 @@
 //! download) and handles redirects, certificates, cookies, compression and HTTP/2.
 
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use curl::easy::{Easy2, Handler, HttpVersion, List, WriteError};
 use serde::{Deserialize, Serialize};
@@ -51,6 +51,11 @@ pub trait Watcher {
     fn start(&mut self, _method: &str, _url: &str) {}
     fn head(&mut self, _status: u16, _headers: &[(String, String)]) {}
     fn chunk(&mut self, _data: &[u8]) {}
+    /// Whether to stop the request now: checked while it waits and as data arrives. A response whose head has
+    /// arrived ends there, with the body so far; before that the request fails as cancelled.
+    fn stopped(&self) -> bool {
+        false
+    }
 }
 
 pub type OnChunk<'a> = Option<&'a mut dyn Watcher>;
@@ -67,6 +72,14 @@ struct Collector<'a> {
     status_line: String,
     body: Vec<u8>,
     on_chunk: OnChunk<'a>,
+    /// When the request times out, unless its response is a stream of server-sent events, which runs until the
+    /// server ends it or the user stops it.
+    deadline: Instant,
+    streaming: bool,
+    /// Whether the final response's head has arrived.
+    head_done: bool,
+    timed_out: bool,
+    stopped: bool,
 }
 
 impl Handler for Collector<'_> {
@@ -78,11 +91,29 @@ impl Handler for Collector<'_> {
         Ok(data.len())
     }
 
+    fn progress(&mut self, _dltotal: f64, _dlnow: f64, _ultotal: f64, _ulnow: f64) -> bool {
+        if self.on_chunk.as_ref().is_some_and(|w| w.stopped()) {
+            self.stopped = true;
+            return false;
+        }
+        if !self.streaming && Instant::now() >= self.deadline {
+            self.timed_out = true;
+            return false;
+        }
+        true
+    }
+
     fn header(&mut self, data: &[u8]) -> bool {
         let line = String::from_utf8_lossy(data);
         let line = line.trim_end();
         if line.is_empty() {
             // The end of a head.
+            self.head_done = true;
+            let status: u16 = self.status_line.split_whitespace().nth(1).and_then(|c| c.parse().ok()).unwrap_or(0);
+            self.streaming = !(300..400).contains(&status)
+                && self.headers.iter().any(|(n, v)| {
+                    n.eq_ignore_ascii_case("content-type") && v.to_ascii_lowercase().starts_with("text/event-stream")
+                });
             if let Some(w) = self.on_chunk.as_mut() {
                 let status = self.status_line.split_whitespace().nth(1).and_then(|c| c.parse().ok()).unwrap_or(0);
                 w.head(status, &self.headers);
@@ -91,6 +122,7 @@ impl Handler for Collector<'_> {
             // A new response (after a redirect or a 100 Continue): only the last one counts.
             self.status_line = line.to_string();
             self.headers.clear();
+            self.head_done = false;
         } else if let Some((n, v)) = line.split_once(':') {
             self.headers.push((n.trim().to_string(), v.trim().to_string()));
         }
@@ -100,7 +132,18 @@ impl Handler for Collector<'_> {
 
 /// Sends `req`; `on_chunk` sees the body as it arrives (server-sent events).
 pub fn execute(req: &Prepared, on_chunk: OnChunk<'_>) -> Result<Response, Error> {
-    let mut easy = Easy2::new(Collector { headers: vec![], status_line: String::new(), body: vec![], on_chunk });
+    let timeout = req.timeout.unwrap_or(DEFAULT_TIMEOUT);
+    let mut easy = Easy2::new(Collector {
+        headers: vec![],
+        status_line: String::new(),
+        body: vec![],
+        on_chunk,
+        deadline: Instant::now() + timeout,
+        streaming: false,
+        head_done: false,
+        timed_out: false,
+        stopped: false,
+    });
     let fail = |e: curl::Error| request_error(&e);
     easy.url(&req.url).map_err(fail)?;
     easy.custom_request(&req.method).map_err(fail)?;
@@ -137,7 +180,9 @@ pub fn execute(req: &Prepared, on_chunk: OnChunk<'_>) -> Result<Response, Error>
         easy.ssl_verify_peer(false).map_err(fail)?;
         easy.ssl_verify_host(false).map_err(fail)?;
     }
-    easy.timeout(req.timeout.unwrap_or(DEFAULT_TIMEOUT)).map_err(fail)?;
+    // The timeout is the progress callback's (`Collector::deadline`): it does not cut a stream of events short.
+    easy.connect_timeout(timeout).map_err(fail)?;
+    easy.progress(true).map_err(fail)?;
     match req.http_version.as_deref() {
         Some("HTTP/1.0") => easy.http_version(HttpVersion::V10).map_err(fail)?,
         Some("HTTP/1.1") => easy.http_version(HttpVersion::V11).map_err(fail)?,
@@ -152,7 +197,23 @@ pub fn execute(req: &Prepared, on_chunk: OnChunk<'_>) -> Result<Response, Error>
         easy.cookie_jar(jar).map_err(fail)?;
     }
 
-    easy.perform().map_err(fail)?;
+    if let Err(e) = easy.perform() {
+        let c = easy.get_ref();
+        if !e.is_aborted_by_callback() {
+            return Err(fail(e));
+        }
+        if c.timed_out {
+            return Err(Error::Request {
+                kind: RequestErrorKind::Timeout,
+                message: format!("{} 秒内没有收到完整的响应", timeout.as_secs_f64()),
+                hint: Some("可以用 `# @timeout <秒>` 调大超时，默认 30 秒".to_string()),
+            });
+        }
+        if !c.head_done {
+            return Err(Error::Request { kind: RequestErrorKind::Cancelled, message: "已停止".to_string(), hint: None });
+        }
+        // Stopped mid-response: the response is what arrived.
+    }
 
     let ms = |d: Result<Duration, curl::Error>| d.map(|d| d.as_secs_f64() * 1000.0).unwrap_or(0.0);
     let dns = ms(easy.namelookup_time());

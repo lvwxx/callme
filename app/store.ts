@@ -6,7 +6,8 @@ import type { EditorRef } from "nsh/base";
 import { Callme } from "callme/native";
 import { api, apiError, project, type ApiError, type EnvView, type RequestRef, type Run } from "./api";
 
-export type RunState = { running: boolean; run?: Run; events: unknown[]; status?: string; error?: ApiError };
+/** A request's latest run; `stopped` when the user stopped it, `token` while it runs (what `stop` takes). */
+export type RunState = { running: boolean; run?: Run; events: unknown[]; status?: string; error?: ApiError; stopped?: boolean; token?: string };
 
 export const requests = signal<RequestRef[]>(project() ? api.list() : []);
 export const files = signal<string[]>(project() ? api.files() : []);
@@ -310,17 +311,33 @@ export async function send() {
   const id = r?.id ?? `#${index}`;
   const key = runKey(file, id);
   if (runs()[key]?.running) return;
-  patchRun(key, { running: true, events: [], status: "发送中…", error: undefined, run: undefined });
+  const token = nextToken();
+  patchRun(key, { running: true, events: [], status: "发送中…", error: undefined, run: undefined, stopped: false, token });
   try {
-    const run = await api.run(file, id, env(), (m) => {
+    const run = await api.run(file, id, env(), token, (m) => {
       if (m.type === "head" && m.streaming) patchRun(key, { status: `${m.status} · 流式接收中…` });
       if (m.type === "event") patchRun(key, { events: [...(runs()[key]?.events ?? []), m.event] });
     });
-    patchRun(key, { running: false, run, status: undefined });
+    patchRun(key, { running: false, run, status: runs()[key]?.stopped ? "已停止" : undefined, token: undefined });
     recent.set([{ file, id, method: run.request.method, status: run.response.status, at: run.at }, ...recent().filter((x) => runKey(x.file, x.id) !== key)].slice(0, 6));
   } catch (e) {
-    patchRun(key, { running: false, status: undefined, error: apiError(e) });
+    const error = apiError(e);
+    // Stopped before a response: nothing to show but that.
+    if (error.kind === "cancelled") patchRun(key, { running: false, status: "已停止", token: undefined });
+    else patchRun(key, { running: false, status: undefined, error, token: undefined });
   }
+}
+
+let tokens = 0;
+const nextToken = () => `run-${++tokens}`;
+
+/** Stops the current request's run, if it is going. */
+export function stop() {
+  const state = currentRun();
+  if (!state?.running || !state.token) return;
+  const key = Object.keys(runs()).find((k) => runs()[k] === state);
+  if (key) patchRun(key, { stopped: true, status: "正在停止…" });
+  api.stop(state.token);
 }
 
 export const recent = signal<{ file: string; id: string; method: string; status: number; at: string }[]>([]);
@@ -381,10 +398,11 @@ export async function sendAfter(name: string) {
   const dep = requests().find((r) => r.name === name && r.file === activeFile()) ?? requests().find((r) => r.name === name);
   if (!dep) return;
   const key = runKey(dep.file, dep.id);
-  patchRun(key, { running: true, events: [], error: undefined });
+  const token = nextToken();
+  patchRun(key, { running: true, events: [], error: undefined, token });
   try {
-    const run = await api.run(dep.file, dep.id, env(), () => {});
-    patchRun(key, { running: false, run });
+    const run = await api.run(dep.file, dep.id, env(), token, () => {});
+    patchRun(key, { running: false, run, token: undefined });
   } catch (e) {
     patchRun(key, { running: false, error: apiError(e) });
     notice.set(`${name} 运行失败：${apiError(e).message}`);

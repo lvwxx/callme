@@ -26,6 +26,7 @@ const icons = {
   // assets/icon.svg's tile (100–924) mapped onto 0–24: × 24/824 after −100.
   logo: [{ tag: "path", d: "M15.75 8.18 A 5.53 5.53 0 1 0 15.75 15.82" }, { tag: "circle", cx: 17.82, cy: 12, r: 1.51, fill: true }],
   play: [{ tag: "path", d: "M6 4.5v15l13-7.5z", fill: true }],
+  stop: [{ tag: "path", d: "M6.5 5h11a1.5 1.5 0 0 1 1.5 1.5v11a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 17.5v-11A1.5 1.5 0 0 1 6.5 5z", fill: true }],
   terminal: [{ tag: "path", d: "m4 17 6-6-6-6" }, { tag: "path", d: "M12 19h8" }],
   foldAll: [{ tag: "path", d: "m7 20 5-5 5 5" }, { tag: "path", d: "m7 4 5 5 5-5" }],
   unfoldAll: [{ tag: "path", d: "m7 15 5 5 5-5" }, { tag: "path", d: "m7 9 5-5 5 5" }],

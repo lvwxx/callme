@@ -29,7 +29,8 @@ import {
 } from "./store";
 import { Kbd, Method } from "./ui";
 
-type Item = { key: string; section: string; label: string; detail?: string; method?: string; shortcut?: string; run: () => void };
+/** A palette row; `send`, on a request's, opens and sends it (⌘↵). */
+type Item = { key: string; section: string; label: string; detail?: string; method?: string; shortcut?: string; run: () => void; send?: () => void };
 
 const query = signal("");
 const selected = signal(0);
@@ -111,6 +112,7 @@ const items = computed<Item[]>(() => {
           detail: `${r.name ? `${r.name} · ` : ""}${r.file} · ${r.url}`,
           method: r.method,
           run: () => (selectRequest(r), close()),
+          send: () => (selectRequest(r), close(), void send()),
         });
     }
   }
@@ -137,9 +139,21 @@ const items = computed<Item[]>(() => {
   return out.slice(0, 50);
 });
 
-function runSelected() {
+const current = () => {
   const list = items();
-  list[Math.min(selected(), list.length - 1)]?.run();
+  return list[Math.min(selected(), list.length - 1)];
+};
+
+function runSelected() {
+  current()?.run();
+}
+
+/** ⌘↵ in the palette: sends the selected request; false when no request is selected. */
+export function sendSelected(): boolean {
+  const it = current();
+  if (!it?.send) return false;
+  it.send();
+  return true;
 }
 
 export function Palette() {
@@ -208,7 +222,10 @@ export function Palette() {
         </Scroll>
         <View class="flex-row gap-4 border-t border-border px-4 py-2">
           <Text class="text-[11px] text-muted-foreground">↑↓ 选择</Text>
-          <Text class="text-[11px] text-muted-foreground">↵ 执行</Text>
+          <Text class="text-[11px] text-muted-foreground">{current()?.send ? "↵ 打开" : "↵ 执行"}</Text>
+          <If when={current()?.send}>
+            <Text class="text-[11px] text-muted-foreground">⌘↵ 发送</Text>
+          </If>
           <Text class="text-[11px] text-muted-foreground">esc 关闭</Text>
         </View>
       </Overlay>

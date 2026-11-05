@@ -16,10 +16,32 @@ test("streams server-sent events as they arrive", async () => {
   await app.press("label:GET 流式");
   await app.press("text:发送");
   await app.waitFor('text:{"i":0,"t":"你"}', { timeout: 10_000 });
-  // The first event shows while the stream still runs.
-  expect(app.texts()).toContain("发送中");
+  // The first event shows while the stream still runs, and the request can be stopped.
+  await app.waitFor("label:停止", { timeout: 1_000 });
   await app.waitFor("text:[DONE]", { timeout: 10_000 });
   await app.waitFor("text:OK", { timeout: 10_000 });
+});
+
+test("stops a stream and keeps the events that arrived", async () => {
+  const app = await open("./App.tsx", { width: 1280, height: 800 });
+  await app.press("label:GET 流式");
+  await app.press("text:发送");
+  await app.waitFor('text:{"i":0,"t":"你"}', { timeout: 10_000 });
+  await app.press("label:停止");
+  await app.waitFor("text:已停止", { timeout: 5_000 });
+  expect(app.texts()).toContain('{"i":0,"t":"你"}');
+  expect(app.texts()).not.toContain("[DONE]");
+  await app.waitFor("label:发送", { timeout: 1_000 });
+});
+
+test("sends a request from the palette with mod+enter", async () => {
+  const app = await open("./App.tsx", { width: 1280, height: 800 });
+  await app.press("label:命令面板");
+  await app.type("id:palette-input", "@stream");
+  await app.waitFor("text:⌘↵ 发送", { timeout: 2_000 });
+  await app.keyboard.press("mod+enter");
+  await app.waitFor("text:[DONE]", { timeout: 10_000 });
+  expect(app.texts()).not.toContain("⌘↵ 发送");
 });
 
 test("turns a pasted curl command into a request", async () => {

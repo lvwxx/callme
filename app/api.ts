@@ -120,9 +120,13 @@ export const api = {
   filter: (json: string, path: string): unknown[] => JSON.parse(Callme.filter(json, path)),
   importText: (input: string, env?: string | null, name?: string | null): { text: string; replaced: string[] } =>
     JSON.parse(Callme.import(root(), input, opt(env), opt(name))),
-  async run(file: string, id: string | null, env: string | null, onMessage: (m: { type: string; [k: string]: unknown }) => void): Promise<Run> {
-    const out = await Callme.run(root(), file, id, env, (message) => onMessage(JSON.parse(message)));
+  /** Runs a request; `stop(token)` stops it. */
+  async run(file: string, id: string | null, env: string | null, token: string, onMessage: (m: { type: string; [k: string]: unknown }) => void): Promise<Run> {
+    const out = await Callme.run(root(), file, id, env, token, (message) => onMessage(JSON.parse(message)));
     return JSON.parse(out);
+  },
+  stop(token: string) {
+    Callme.stop(token);
   },
   pretty: (json: string) => Callme.pretty(json),
 };

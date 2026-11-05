@@ -20,6 +20,7 @@ import {
   newRequest,
   openFile,
   send,
+  stop,
   setText,
   settledText,
   tabs,
@@ -79,7 +80,7 @@ function RequestBar() {
       </View>
       <CurlCard />
       <Divider />
-      <SendButton running={running()} disabled={!currentIndex()} onPress={send} />
+      <SendButton running={running()} disabled={!currentIndex()} onPress={send} onStop={stop} />
     </View>
   );
 }

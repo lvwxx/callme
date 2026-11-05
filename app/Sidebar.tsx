@@ -25,7 +25,7 @@ import {
   trashFile,
   view,
 } from "./store";
-import { IconButton, Method, SectionLabel, Status } from "./ui";
+import { IconButton, Method, SectionLabel, Status, Tip } from "./ui";
 
 type Row =
   | { kind: "folder"; key: string; label: string; depth: number; open: boolean }
@@ -143,6 +143,7 @@ export function Sidebar() {
                   role="button"
                   accessibilityLabel={`${r.request.method} ${requestLabel(r.request)}`}
                   onPress={() => selectRequest(r.request)}
+                  tooltip={<Tip label={`${requestLabel(r.request)}\n${r.request.method} ${r.request.url}`} placement="right" delay={800} />}
                   class={`h-7 flex-row items-center gap-1.5 rounded-md pr-2 ${active() ? "border border-list-active-border bg-list-active" : "hover:bg-list-hover"}`}
                   style={{ paddingLeft: pad }}
                 >
