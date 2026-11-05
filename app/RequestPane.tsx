@@ -1,6 +1,6 @@
 // The request pane: open files as tabs, the current request's bar (method, name, resolved URL, copy as curl,
 // send), and the `.http` editor with callme's highlighting, completion, hover cards, diagnostics and folds.
-import { type Bounds, computed, Overlay, signal, Text, View } from "nsh";
+import { type Bounds, computed, Overlay, Scroll, signal, Text, View, type ViewRef } from "nsh";
 import { Editor, type EditorDecoration, type EditorDiagnostic } from "nsh/base";
 import { api, requestLabel, type Hover } from "./api";
 import { Icon } from "./icons";
@@ -8,6 +8,7 @@ import {
   activeFile,
   closeTab,
   copyCurl,
+  curlCommand,
   currentIndex,
   currentRequest,
   currentRun,
@@ -73,10 +74,54 @@ function RequestBar() {
         <Text class="ml-2 flex-1 font-mono text-xs text-muted-foreground" style={{ numberOfLines: 1 }}>{(p() as { url: string }).url}</Text>
       </If>
       <IconButton icon="plus" label="新建请求" shortcut="⌘N" onPress={newRequest} />
-      <IconButton icon="terminal" label="复制为 curl" shortcut="⌘⇧C" onPress={copyCurl} />
+      <View ref={(r) => (curlAnchor = r)}>
+        <IconButton icon="terminal" label="curl 命令" shortcut="⌘⇧C 直接复制" onPress={() => curlOpen.set(!curlOpen())} />
+      </View>
+      <CurlCard />
       <Divider />
       <SendButton running={running()} disabled={!currentIndex()} onPress={send} />
     </View>
+  );
+}
+
+const curlOpen = signal(false);
+let curlAnchor: ViewRef | undefined;
+
+/** The current request as a curl command, to read and copy. */
+function CurlCard() {
+  const c = () => (curlOpen() ? curlCommand() : null);
+  return (
+    <If when={curlOpen()}>
+      <Overlay
+        anchor={curlAnchor}
+        placement="bottom"
+        align="end"
+        offset={6}
+        onPressOutside={() => curlOpen.set(false)}
+        onCancel={() => curlOpen.set(false)}
+        class="w-[560px] rounded-lg border border-border bg-popover"
+      >
+        <View class="flex-row items-center gap-2 border-b border-border px-3 py-2">
+          <Icon name="terminal" size={13} />
+          <Text class="flex-1 text-[13px] font-semibold text-foreground">curl</Text>
+          <View
+            role="button"
+            accessibilityLabel="复制 curl 命令"
+            onPress={() => void copyCurl().then(() => curlOpen.set(false))}
+            class="h-7 flex-row items-center gap-1.5 rounded-md bg-button px-2.5 active:opacity-80"
+          >
+            <Icon name="copy" size={12} color="button-foreground" />
+            <Text class="text-xs font-semibold text-button-foreground">复制</Text>
+          </View>
+        </View>
+        <Scroll class="max-h-[320px] px-3 py-2.5">
+          <Text class={`font-mono text-xs ${c() && "error" in c()! ? "text-status-err" : "text-foreground"} select-text`}>
+            {c() ? ("text" in c()! ? (c() as { text: string }).text : (c() as { error: string }).error) : ""}
+          </Text>
+        </Scroll>
+        <Text class="border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">变量已替换成当前环境的值，密钥也是真实值，分享前注意</Text>
+      </Overlay>
+    </If>
   );
 }
 

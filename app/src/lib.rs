@@ -342,11 +342,6 @@ impl Callme {
         Service { project: &project, file: &file, text: &text, env }.curl(index as usize).map_err(err)
     }
 
-    /// Puts `text` on the clipboard.
-    pub fn copy(text: String) {
-        set_clipboard(text);
-    }
-
     /// The 1-based index of the request at `line` of `.http` text, 0 for none.
     pub fn request_at(text: String, line: u32) -> u32 {
         lang::request_at(&text, line as usize).unwrap_or(0) as u32

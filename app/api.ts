@@ -1,5 +1,5 @@
 // Typed wrappers over `callme/native` (src/lib.rs), which answers in JSON strings.
-import { signal } from "nsh";
+import { Clipboard, signal } from "nsh";
 import { Callme } from "callme/native";
 
 export type RequestRef = { file: string; id: string; name?: string | null; index: number; method: string; url: string; title?: string | null };
@@ -111,7 +111,8 @@ export const api = {
     }
   },
   curl: (file: string, text: string, index: number, env?: string | null) => Callme.curl(root(), file, text, index, opt(env)),
-  copy: (text: string) => Callme.copy(text),
+  /** Puts `text` on the system clipboard. */
+  copy: (text: string) => Clipboard.writeText(text),
   envView: (env?: string | null): EnvView => JSON.parse(Callme.envView(root(), opt(env))),
   setEnv: (env: string) => Callme.setEnv(root(), env),
   history: (file: string, id: string, limit = 20): Run[] => JSON.parse(Callme.history(root(), file, id, limit)),

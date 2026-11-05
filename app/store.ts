@@ -406,15 +406,26 @@ export function formatBody() {
   }
 }
 
-/** Copies the current request as a curl command. */
-export function copyCurl() {
+/** The current request as a curl command, or the reason there is none. */
+export function curlCommand(): { text: string } | { error: string } {
   const index = currentIndex();
-  if (!activeFile() || !index) return;
+  if (!activeFile() || !index) return { error: "光标不在任何请求里" };
   try {
-    api.copy(api.curl(activeFile(), text(), index, env()));
+    return { text: api.curl(activeFile(), text(), index, env()) };
+  } catch (e) {
+    return { error: apiError(e).message };
+  }
+}
+
+/** Copies the current request as a curl command. */
+export async function copyCurl() {
+  const c = curlCommand();
+  if ("error" in c) return notice.set(c.error);
+  try {
+    await api.copy(c.text);
     notice.set("已复制为 curl");
   } catch (e) {
-    notice.set(apiError(e).message);
+    notice.set(`复制失败：${apiError(e).message}`);
   }
 }
 

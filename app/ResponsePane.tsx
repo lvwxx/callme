@@ -73,10 +73,7 @@ function Summary() {
             <IconButton
               icon="copy"
               label="复制响应体"
-              onPress={() => {
-                api.copy(filtered().text);
-                notice.set("已复制响应体");
-              }}
+              onPress={() => void api.copy(filtered().text).then(() => notice.set("已复制响应体"))}
             />
           </>
         )}
