@@ -3,6 +3,7 @@ name = "callme-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "Parse, resolve and execute .http request files"
 
 [dependencies]

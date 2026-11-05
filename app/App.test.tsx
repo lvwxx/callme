@@ -132,6 +132,7 @@ test("comments out a header and formats a JSON body", async () => {
 });
 
 test("offers to add secrets to .gitignore", async () => {
+  Callme.write(Callme.root(), ".gitignore", "");
   const app = await open("./App.tsx", { width: 1280, height: 800 });
   await app.waitFor("text:.gitignore 里没有 .callme/、http-client.private.env.json：密钥和本地记录可能会被提交到 git", { timeout: 5_000 });
   await app.press("label:加到 .gitignore");

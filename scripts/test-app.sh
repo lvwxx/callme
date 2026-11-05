@@ -13,7 +13,7 @@ port="$(cat "$work/port")"
 mkdir -p "$work/project/.callme"
 printf '{\n  "dev": {\n    "baseUrl": "http://127.0.0.1:%s",\n    "secret": "s"\n  },\n  "prod": {\n    "baseUrl": "https://api.example.invalid"\n  }\n}\n' "$port" > "$work/project/http-client.env.json"
 echo '{"env": "dev"}' > "$work/project/.callme/state.json"
-touch "$work/project/.gitignore"
+printf '.callme/\nhttp-client.private.env.json\n' > "$work/project/.gitignore"
 cat > "$work/project/api.http" <<'HTTP'
 ### 用户
 # @name me
