@@ -80,7 +80,7 @@ export function Sidebar() {
     </View>
   );
   return (
-    <View class="w-[248px] border-r border-border bg-panel">
+    <View class="flex-1 bg-panel">
       <View class="border-b border-border px-1.5 pb-2 pt-2.5">
         <SectionLabel>环境</SectionLabel>
         {envFile("http-client.env.json", "public")}

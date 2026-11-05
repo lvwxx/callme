@@ -268,7 +268,7 @@ export function ResponsePane() {
     { id: "history" as Tab, label: "历史" },
   ];
   return (
-    <View class="w-[500px] border-l border-border bg-panel">
+    <View class="flex-1 bg-panel">
       <Summary />
       <Tabs tabs={tabs()} value={tab()} onChange={(t) => tab.set(t)} />
       <If when={tab() === "body"}>

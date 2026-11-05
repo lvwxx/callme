@@ -1,6 +1,7 @@
 // callme: a simple, AI-friendly API client for .http files. The title bar, the sidebar, the request and response
 // panes (or the environment view), a status bar, and the command palette over them.
-import { computed, effect, keymap, mount, signal, Text, View } from "nsh";
+import { computed, effect, keymap, mount, signal, Storage, Text, View } from "nsh";
+import { ResizablePanel, ResizablePanelGroup } from "nsh/base";
 import { isAvailable as hasWindow, Menu, Window } from "nsh/desktop";
 import { Callme } from "callme/native";
 import { api, project } from "./api";
@@ -130,6 +131,21 @@ function Welcome() {
   );
 }
 
+/** The widths of the sidebar and the response, as the user last dragged them. */
+const LAYOUT_KEY = "layout";
+const layout = signal({ sidebar: 248, response: 500 });
+void Storage.getItem(LAYOUT_KEY).then((saved) => {
+  try {
+    const value = saved ? JSON.parse(saved) : null;
+    if (value && typeof value.sidebar === "number" && typeof value.response === "number") layout.set(value);
+  } catch {}
+});
+function resized(panel: "sidebar" | "response", size: number) {
+  const next = { ...layout(), [panel]: Math.round(size) };
+  layout.set(next);
+  void Storage.setItem(LAYOUT_KEY, JSON.stringify(next));
+}
+
 function App() {
   // A picked history record belongs to the request it was picked for.
   effect(() => {
@@ -140,11 +156,36 @@ function App() {
     <View class="flex-1 bg-background">
       <TitleBar />
       <If when={project()} else={<Welcome />}>
-        <View class="min-h-0 flex-1 flex-row">
-          <Sidebar />
-          <If when={view() === "env"} else={<><RequestPane /><ResponsePane /></>}>
-            <EnvPane />
-          </If>
+        <View class="min-h-0 flex-1">
+          <ResizablePanelGroup
+            axis="horizontal"
+            handleClass="bg-border group-hover:bg-muted-foreground group-active:bg-brand"
+            handleAccessibilityLabel="调整栏宽"
+          >
+            <ResizablePanel
+              size={layout().sidebar}
+              minSize={180}
+              maxSize={480}
+              fixed
+              onResize={({ size }) => resized("sidebar", size)}
+            >
+              <Sidebar />
+            </ResizablePanel>
+            <ResizablePanel minSize={320}>
+              <If when={view() === "env"} else={<RequestPane />}>
+                <EnvPane />
+              </If>
+            </ResizablePanel>
+            <ResizablePanel
+              size={layout().response}
+              minSize={300}
+              fixed
+              visible={view() !== "env"}
+              onResize={({ size }) => resized("response", size)}
+            >
+              <ResponsePane />
+            </ResizablePanel>
+          </ResizablePanelGroup>
         </View>
       </If>
       <GitignoreNote />
