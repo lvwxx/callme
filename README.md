@@ -91,6 +91,24 @@ The MCP server offers `list_requests`, `run_request`, `get_history` and `list_en
 
 ![The request as a curl command](docs/images/curl.png)
 
+## Built with nsh
+
+The desktop app is built on [nsh (Native Shell)](https://github.com/longbridge/nsh), Longbridge's native UI
+framework: a Rust core that renders with each platform's own views (AppKit on macOS, Win32 on Windows, GTK 4 on
+Linux), with screens written in TSX and Rust components alongside. callme uses it for:
+
+- **The app itself**: a TSX app with a Rust crate of its own (`app/`), which exposes callme-core to TSX as a native
+  module, so the app, the CLI and MCP share one implementation.
+- **The editor**: nsh's `Editor` (highlighting, completion, hovers, go to definition, diagnostics, folding), with a
+  `.http` highlighter written in Rust on callme-core's tokens, and the response's JSON shown and folded in a read-only
+  one.
+- **The rest of the UI**: native windows, the title bar and menus (`nsh/desktop`), overlays and tooltips, Tailwind
+  classes over a theme from the Longbridge design tokens (`app/theme.json`), and light and dark appearances.
+- **Tests and packaging**: `nsh test` runs the app's tests headless or in real windows (with screenshots), and
+  `nsh package` builds `callme.app`.
+
+The core and the CLI do not depend on nsh.
+
 ## Build from source
 
 You need Rust (stable). The desktop app also needs nsh built from source, since the editor it uses is not in a

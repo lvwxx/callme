@@ -61,6 +61,17 @@ MCP 提供 `list_requests`、`run_request`、`get_history`、`list_envs` 四个�
 - `⌘↵` 发送，`⌘N` 新建请求，`⌘⇧F` 格式化 JSON 请求体，`⌘/` 注释一行，`⌘O` 打开文件夹。
 - 文件自动保存；被外部（比如 AI）修改时自动重新加载。
 
+## 基于 nsh 构建
+
+桌面版基于 [nsh（Native Shell）](https://github.com/longbridge/nsh)，Longbridge 自研的原生 UI 框架：Rust 内核，用各平台自己的原生控件渲染（macOS 的 AppKit、Windows 的 Win32、Linux 的 GTK 4），界面用 TSX 写，也可以搭配 Rust 组件。callme 用到了它的这些部分：
+
+- **app 本身**：一个带 Rust crate 的 TSX 应用（`app/`），Rust crate 把 callme-core 作为原生模块提供给 TSX，所以桌面版、命令行和 MCP 共用同一套实现。
+- **编辑器**：nsh 的 `Editor`（高亮、补全、悬停、跳转到定义、诊断、折叠）；`.http` 的高亮器是用 Rust 写的，基于 callme-core 的分词；响应体的 JSON 用只读的 `Editor` 显示和折叠。
+- **其余界面**：原生窗口、标题栏和菜单（`nsh/desktop`）、浮层和提示、Tailwind 类名，主题取自 Longbridge 设计系统的色值（`app/theme.json`），支持浅色和深色。
+- **测试和打包**：`nsh test` 可以无界面运行，也可以在真实窗口里运行并截图；`nsh package` 打包出 `callme.app`。
+
+core 和命令行不依赖 nsh。
+
 ## 开发
 
 需要 Rust（stable）和从源码安装的 nsh（桌面版用到的编辑器还没有发布到 crates.io）：
