@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- macOS icon grid: an 824 × 824 tile, 100 px margins, 185 px corners. -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="#1a1c23"/>
+  <rect x="100.5" y="100.5" width="823" height="823" rx="184.5" fill="none" stroke="#ffffff" stroke-opacity="0.08"/>
+  <!-- The "c": an arc open to the right, and the request leaving it. -->
+  <path d="M 641 381 A 190 190 0 1 0 641 643" fill="none" stroke="#00b8b8" stroke-width="92" stroke-linecap="round"/>
+  <circle cx="712" cy="512" r="52" fill="#00b8b8"/>
+</svg>

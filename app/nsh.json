@@ -1,12 +1,13 @@
 {
   "name": "callme",
   "id": "dev.callme.app",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "build": 1,
   "rust": ".",
   "appearance": "system",
   "theme": "theme.json",
   "capabilities": {
     "clipboard": true
-  }
+  },
+  "icon": "assets/icon.png"
 }
