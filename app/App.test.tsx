@@ -141,3 +141,16 @@ test("warns about an environment missing a variable", async () => {
   // The line depends on the tests before (a new environment rewrites the file).
   await app.waitUntil(() => app.texts().some((t) => /^第 \d+ 行：prod 没有 secret：其他环境有，请求里也用到了$/.test(t)), { timeout: 5_000 });
 });
+
+test("folds and unfolds a file's requests", async () => {
+  const app = await open("./App.tsx", { width: 1280, height: 800 });
+  expect(app.texts()).toContain("stream");
+  // The open file, pressed again: its requests fold away; the arrow brings them back.
+  await app.press("label:api.http");
+  await app.waitUntil(() => !app.texts().includes("stream"), { timeout: 3_000 });
+  await app.press("label:展开 api.http");
+  await app.waitFor("text:stream", { timeout: 3_000 });
+  await app.press("label:收起 api.http");
+  await app.waitUntil(() => !app.texts().includes("stream"), { timeout: 3_000 });
+  await app.press("label:展开 api.http");
+});

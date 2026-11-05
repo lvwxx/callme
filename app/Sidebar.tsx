@@ -117,6 +117,8 @@ export function Sidebar() {
               return r.kind === "file" && n?.kind === "rename" && n.file === r.file;
             };
             const file = r.kind === "file" ? r.file : "";
+            // Read when it is used: the row stays while its folding changes.
+            const isOpen = () => !closed().has(r.key);
             return (
               <If
                 when={!renaming()}
@@ -126,11 +128,23 @@ export function Sidebar() {
                 role="button"
                 accessibilityLabel={r.label}
                 onContextMenu={(e) => r.kind === "file" && fileMenu(r.file, e.pagePosition)}
-                onPress={() => (r.kind === "file" ? (openFile(r.file), r.open || toggle(r.key)) : toggle(r.key))}
+                onPress={() => {
+                  if (r.kind === "folder") return toggle(r.key);
+                  // A file: open it (and show its requests); pressed again while it is the one open, fold it.
+                  if (activeFile() === r.file && isOpen()) return toggle(r.key);
+                  openFile(r.file);
+                  if (!isOpen()) toggle(r.key);
+                }}
                 class="h-7 flex-row items-center gap-1.5 rounded-md pr-2 hover:bg-list-hover"
                 style={{ paddingLeft: r.kind === "folder" ? pad : pad - 14 }}
               >
-                <View style={{ transform: [{ rotate: r.open ? "90deg" : "0deg" }] }}>
+                <View
+                  role="button"
+                  accessibilityLabel={isOpen() ? `收起 ${r.label}` : `展开 ${r.label}`}
+                  onPress={() => toggle(r.key)}
+                  class="h-5 w-4 items-center justify-center rounded hover:bg-list-active"
+                  style={{ transform: [{ rotate: isOpen() ? "90deg" : "0deg" }] }}
+                >
                   <Icon name="chevronRight" size={12} />
                 </View>
                 <Icon name={r.kind === "folder" ? "folder" : "file"} />
