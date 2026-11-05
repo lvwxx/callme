@@ -43,6 +43,7 @@ Authorization: Bearer {{login.response.body.$.token}}
 - `{{$uuid}}`、`{{$timestamp}}`、`{{$isoTimestamp}}`、`{{$randomInt}}`：动态值。
 
 请求体是 JSON 且没写 `Content-Type` 时，会自动加上 `application/json`。
+没写 `User-Agent` 时发 `curl/<libcurl 版本> callme/<版本>`（有些网关只放行认识的 User-Agent）；要换就写一行 `User-Agent: …`。
 
 ## 不支持
 

@@ -56,7 +56,11 @@ pub trait Watcher {
 pub type OnChunk<'a> = Option<&'a mut dyn Watcher>;
 
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
-const USER_AGENT: &str = concat!("callme/", env!("CARGO_PKG_VERSION"));
+/// `curl/<libcurl's version> callme/<version>`: requests go out through libcurl, and gateways that let curl through
+/// by its User-Agent (and turn unknown ones away) treat callme as they treat curl.
+fn user_agent() -> String {
+    format!("curl/{} callme/{}", curl::Version::get().version(), env!("CARGO_PKG_VERSION"))
+}
 
 struct Collector<'a> {
     headers: Vec<(String, String)>,
@@ -124,7 +128,7 @@ pub fn execute(req: &Prepared, on_chunk: OnChunk<'_>) -> Result<Response, Error>
     }
     easy.http_headers(list).map_err(fail)?;
     if !has_ua {
-        easy.useragent(USER_AGENT).map_err(fail)?;
+        easy.useragent(&user_agent()).map_err(fail)?;
     }
     easy.accept_encoding("").map_err(fail)?;
     easy.follow_location(req.follow_redirects).map_err(fail)?;

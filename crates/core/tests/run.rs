@@ -157,7 +157,8 @@ fn runs_requests_end_to_end() {
     assert_eq!(body["method"], "POST");
     assert_eq!(body["auth"], "Bearer tok-42", "response reference");
     assert_eq!(body["contentType"], "application/json", "added for a JSON body");
-    assert!(body["ua"].as_str().unwrap().starts_with("callme/"));
+    let ua = body["ua"].as_str().unwrap();
+    assert!(ua.starts_with("curl/") && ua.contains(" callme/"), "{ua}");
     assert_eq!(body["body"], r#"{"user": "ada", "password": "pa55word-secret"}"#);
     assert_eq!(echo.record.request.added_headers, vec!["Content-Type"]);
 
