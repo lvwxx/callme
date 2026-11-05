@@ -21,7 +21,7 @@ export const paletteOpen = signal(false);
 export const runs = signal<Record<string, RunState>>({});
 export const notice = signal<string | null>(null);
 
-export const editor: { ref?: EditorRef; response?: EditorRef } = {};
+export const editor: { ref?: EditorRef; response?: EditorRef; env?: EditorRef } = {};
 
 const saved = new Map<string, { text: string; mtime: number }>();
 
@@ -306,6 +306,54 @@ export function newRequest() {
   cursorLine.set(line);
   setTimeout(() => editor.ref?.setSelections([{ anchor: { line, column: 21 }, head: { line, column: 21 } }]), 0);
   setTimeout(() => editor.ref?.focus(), 0);
+}
+
+/** Goes to a definition: a line of an environment file in the environment view, else a line of a `.http` file. */
+export function goTo(file: string, line: number) {
+  if (file === "http-client.env.json" || file === "http-client.private.env.json") {
+    saveNow();
+    envTab.set(file === "http-client.env.json" ? "public" : "private");
+    view.set("env");
+    setTimeout(() => editor.env?.goToLine(line), 50);
+    return;
+  }
+  openFile(file, line);
+}
+
+/** The request a run failed for because it had not run yet (`请求 \`login\` 还没有运行过`), else null. */
+export function missingDependency(message: string | undefined): string | null {
+  const m = message?.match(/请求 `([^`]+)` 还没有运行过/);
+  return m ? m[1] : null;
+}
+
+/** Runs request `name` (the active file's first, else the project's), then the current request again. */
+export async function sendAfter(name: string) {
+  const dep = requests().find((r) => r.name === name && r.file === activeFile()) ?? requests().find((r) => r.name === name);
+  if (!dep) return;
+  const key = runKey(dep.file, dep.id);
+  patchRun(key, { running: true, events: [], error: undefined });
+  try {
+    const run = await api.run(dep.file, dep.id, env(), () => {});
+    patchRun(key, { running: false, run });
+  } catch (e) {
+    patchRun(key, { running: false, error: apiError(e) });
+    notice.set(`${name} 运行失败：${apiError(e).message}`);
+    return;
+  }
+  await send();
+}
+
+/** Pretty-prints the current request's JSON body. */
+export function formatBody() {
+  const index = currentIndex();
+  if (!activeFile() || !index) return;
+  try {
+    const next = api.formatBody(text(), index);
+    if (next === null) return notice.set("当前请求没有可以格式化的请求体");
+    if (next !== text()) setText(next);
+  } catch (e) {
+    notice.set(apiError(e).message);
+  }
 }
 
 /** Copies the current request as a curl command. */

@@ -90,4 +90,40 @@ test("creates an environment", async () => {
   const env = JSON.parse(Callme.read(Callme.root(), "http-client.env.json"));
   expect(env.staging).toEqual({ baseUrl: "" });
   await app.waitFor("label:切换环境，当前 staging", { timeout: 5_000 });
+  // Back to dev for the tests after this one.
+  await app.press("label:切换环境，当前 staging");
+  await app.chooseMenuItem("dev");
+});
+
+test("goes to a variable's definition", async () => {
+  const app = await open("./App.tsx", { width: 1280, height: 800, platform: "macos" });
+  // The caret is at the start of `GET {{baseUrl}}/me`: into `baseUrl`, then F12.
+  await app.type("id:request-editor", "");
+  for (let i = 0; i < 7; i++) await app.keyboard.press("right");
+  await app.keyboard.press("f12");
+  await app.waitFor("text:生效变量", { timeout: 5_000 });
+});
+
+test("runs a request's dependency first", async () => {
+  const app = await open("./App.tsx", { width: 1280, height: 800 });
+  await app.press("label:GET who");
+  await app.press("text:发送");
+  await app.waitFor("text:先运行 token，再运行这个请求", { timeout: 5_000 });
+  await app.press("text:先运行 token，再运行这个请求");
+  await app.waitFor("text:OK", { timeout: 10_000 });
+});
+
+test("comments out a header and formats a JSON body", async () => {
+  const app = await open("./App.tsx", { width: 1280, height: 800, platform: "macos" });
+  // On `me`'s request line: down to `Accept: …`, comment it out.
+  await app.type("id:request-editor", "");
+  await app.keyboard.press("down");
+  await app.keyboard.press("mod+/");
+  await app.waitFor("text:# Accept: application/json", { timeout: 5_000 });
+  await app.keyboard.press("mod+/");
+  // A body on one line, formatted.
+  await app.press("label:POST create");
+  await app.keyboard.press("mod+shift+f");
+  await app.waitFor('text:  "a": 1,', { timeout: 5_000 });
+  await app.waitFor("text:    {{$uuid}}", { timeout: 5_000 });
 });

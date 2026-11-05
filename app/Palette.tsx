@@ -14,6 +14,7 @@ import {
   envState,
   envTab,
   files,
+  formatBody,
   openFile,
   paletteOpen,
   refresh,
@@ -116,6 +117,7 @@ const items = computed<Item[]>(() => {
   if (!onlyRequests) {
     const commands: Item[] = [
       { key: "send", section: "命令", label: "发送当前请求", shortcut: "⌘↵", run: () => (close(), send()) },
+      { key: "format", section: "命令", label: "格式化 JSON 请求体", shortcut: "⌘⇧F", run: () => (close(), formatBody()) },
       { key: "new", section: "命令", label: "新建请求", shortcut: "⌘N", run: () => (close(), newRequest()) },
       { key: "newfile", section: "命令", label: "新建请求文件", shortcut: "⌘⇧N", run: () => (close(), naming.set({ kind: "create" })) },
       {

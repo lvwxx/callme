@@ -402,6 +402,47 @@ pub fn all_variables(text: &str) -> Vec<(usize, Range<usize>, String)> {
     out
 }
 
+/// `text` with request `index`'s JSON body pretty-printed (two spaces, keys in order); `{{…}}` inside or between
+/// values stay as written. None when the request has no body; an error when the body is not JSON.
+pub fn format_body(text: &str, index: usize) -> Result<Option<String>, String> {
+    let parsed = crate::parse::parse(text);
+    let Some(r) = parsed.requests.iter().find(|r| r.index == index) else { return Ok(None) };
+    let Some((start, end)) = r.body_lines else { return Ok(None) };
+    let lines: Vec<&str> = text.split('\n').collect();
+    let body = lines[start..end].join("\n");
+    if body.trim_start().starts_with("< ") {
+        return Ok(None);
+    }
+    // Variables become placeholders JSON accepts: strings where a value goes, the text itself inside strings.
+    let mut vars: Vec<(String, String)> = Vec::new();
+    let mut masked = String::with_capacity(body.len());
+    let mut last = 0;
+    for (range, _) in crate::resolve::references(&body) {
+        let before = body[..range.start].trim_end();
+        let in_value = matches!(before.chars().last(), Some(':' | '[' | ',') | None);
+        let key = format!("__callme_var_{}__", vars.len());
+        masked.push_str(&body[last..range.start]);
+        if in_value {
+            masked.push_str(&format!("\"{key}\""));
+            vars.push((format!("\"{key}\""), body[range.clone()].to_string()));
+        } else {
+            masked.push_str(&key);
+            vars.push((key, body[range.clone()].to_string()));
+        }
+        last = range.end;
+    }
+    masked.push_str(&body[last..]);
+    let value: serde_json::Value = serde_json::from_str(&masked).map_err(|e| format!("请求体不是合法的 JSON：{e}"))?;
+    let mut pretty = serde_json::to_string_pretty(&value).unwrap();
+    for (key, original) in vars.iter().rev() {
+        pretty = pretty.replace(key.as_str(), original);
+    }
+    let mut out: Vec<String> = lines[..start].iter().map(|s| s.to_string()).collect();
+    out.extend(pretty.lines().map(str::to_string));
+    out.extend(lines[end..].iter().map(|s| s.to_string()));
+    Ok(Some(out.join("\n")))
+}
+
 /// Common request headers and values offered for them.
 pub const HEADERS: &[(&str, &[&str])] = &[
     ("Accept", &["application/json", "*/*", "text/event-stream", "text/html", "application/xml"]),
@@ -439,6 +480,18 @@ pub const DYNAMIC: &[(&str, &str)] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn formats_json_bodies_keeping_variables() {
+        let t = "### a\nPOST /a\n\n{\"user\":\"{{user}}\",\"id\": {{login.response.body.$.id}}, \"tags\":[1,{{n}}]}\n\n### b\nGET /b";
+        let out = format_body(t, 1).unwrap().unwrap();
+        assert_eq!(
+            out,
+            "### a\nPOST /a\n\n{\n  \"user\": \"{{user}}\",\n  \"id\": {{login.response.body.$.id}},\n  \"tags\": [\n    1,\n    {{n}}\n  ]\n}\n\n### b\nGET /b"
+        );
+        assert_eq!(format_body(t, 2).unwrap(), None, "no body");
+        assert!(format_body("POST /a\n\n{oops", 1).is_err());
+    }
 
     #[test]
     fn utf16_columns() {

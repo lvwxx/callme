@@ -76,6 +76,17 @@ pub struct Hover {
     pub defined_in: Option<String>,
 }
 
+/// A definition: `file` (relative to the root) and its 0-based `line`; `start..end` is the `{{…}}` it is for, in
+/// UTF-16 columns of the line asked about.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Definition {
+    pub file: String,
+    pub line: usize,
+    pub start: usize,
+    pub end: usize,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VarRow {
@@ -274,6 +285,30 @@ impl Service<'_> {
         Some(Hover { values, defined_in, ..base })
     }
 
+    /// Where the `{{…}}` at `line`, UTF-16 `col16` is defined: an environment variable's line in its environment
+    /// file, a response reference's request line. Lines are 0-based.
+    pub fn definition(&self, line: usize, col16: usize) -> Option<Definition> {
+        let lines = self.lines();
+        let src = lines.get(line)?;
+        let (expr, range) = lang::variable_at(src, lang::byte_col(src, col16))?;
+        let link = (lang::utf16_col(src, range.start), lang::utf16_col(src, range.end));
+        if expr.starts_with('$') {
+            return None;
+        }
+        if let Some((name, _)) = expr.split_once(".response.") {
+            // The current text first: it may hold the request, unsaved.
+            let parsed = parse::parse(self.text);
+            if let Some(r) = parsed.requests.iter().find(|r| r.name.as_deref() == Some(name)) {
+                return Some(Definition { file: self.file.to_string(), line: r.request_line, start: link.0, end: link.1 });
+            }
+            let (file, r) = self.project.find_named(self.file, name).ok()?;
+            return Some(Definition { file, line: r.request_line, start: link.0, end: link.1 });
+        }
+        let at = definition(self.project, self.env_name().as_deref(), &expr)?;
+        let (file, n) = at.rsplit_once(':')?;
+        Some(Definition { file: file.to_string(), line: n.parse::<usize>().ok()?.saturating_sub(1), start: link.0, end: link.1 })
+    }
+
     /// The method and URL request `index` would be sent with (secrets masked).
     pub fn preview(&self, index: usize) -> Result<(String, String), Error> {
         let parsed = parse::parse(self.text);
@@ -414,6 +449,19 @@ mod tests {
         let r = svc(&p, "dev").hover(3, 30).unwrap();
         assert_eq!(r.kind, "response");
         assert!(r.note.unwrap().contains("还没有运行过"));
+    }
+
+    #[test]
+    fn finds_definitions() {
+        let (_d, p) = project();
+        let s = svc(&p, "dev");
+        assert_eq!(s.definition(2, 8), Some(Definition { file: PUBLIC_FILE.into(), line: 3, start: 4, end: 15 }));
+        assert_eq!(s.definition(2, 24).unwrap().file, PRIVATE_FILE);
+        assert_eq!(s.definition(3, 30), Some(Definition { file: "auth.http".into(), line: 1, start: 22, end: 53 }));
+        assert_eq!(s.definition(2, 1), None);
+        let t = "# @name a\nGET /a\n###\nGET {{a.response.body.$.x}}";
+        let local = Service { project: &p, file: "x.http", text: t, env: None };
+        assert_eq!(local.definition(3, 8).unwrap(), Definition { file: "x.http".into(), line: 1, start: 4, end: 27 });
     }
 
     #[test]

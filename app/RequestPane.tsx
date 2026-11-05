@@ -14,6 +14,7 @@ import {
   cursorLine,
   editor,
   env,
+  goTo,
   naming,
   newRequest,
   openFile,
@@ -148,6 +149,7 @@ function HoverCard() {
           <If when={d().definedIn}>
             <View class="flex-row justify-between border-t border-border px-3 py-1.5">
               <Text class="font-mono text-[11px] text-muted-foreground">{d().definedIn!}</Text>
+              <Text class="text-[11px] text-muted-foreground">⌘ 点击跳转</Text>
             </View>
           </If>
           </>
@@ -192,6 +194,17 @@ export function RequestPane() {
             hover.set(data || messages.length ? { data, anchor: e.pageBounds, messages } : null);
           }}
           onHoverEnd={() => hover.set(null)}
+          onDefinitionRequest={(e) => {
+            const d = api.definition(activeFile(), text(), e.position.line, e.position.column, env());
+            if (!d) return;
+            if (e.trigger === "hover") {
+              const line = e.position.line;
+              editor.ref?.presentDefinitionLink(e.id, { start: { line, column: d.start }, end: { line, column: d.end } });
+            } else {
+              hover.set(null);
+              goTo(d.file, d.line);
+            }
+          }}
           diagnostics={editorDiagnostics()}
           decorations={decorations()}
           foldRanges={folds()}

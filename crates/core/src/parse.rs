@@ -32,6 +32,8 @@ pub struct Request {
     pub start_line: usize,
     pub end_line: usize,
     pub request_line: usize,
+    /// The body's lines, `start..end`, when it has one.
+    pub body_lines: Option<(usize, usize)>,
 }
 
 impl Request {
@@ -236,6 +238,7 @@ fn parse_block(
     }
 
     // Body.
+    let body_start = i;
     let mut body_lines: Vec<&str> = Vec::new();
     while i < end {
         let t = lines[i].trim_start();
@@ -253,6 +256,7 @@ fn parse_block(
     while body_lines.last().is_some_and(|l| l.trim().is_empty()) {
         body_lines.pop();
     }
+    let body_range = (!body_lines.is_empty()).then(|| (body_start, body_start + body_lines.len()));
     let body = if body_lines.is_empty() {
         None
     } else if body_lines.len() == 1 && body_lines[0].trim_start().starts_with("< ") {
@@ -274,6 +278,7 @@ fn parse_block(
         start_line: start,
         end_line: end,
         request_line,
+        body_lines: body_range,
     })
 }
 

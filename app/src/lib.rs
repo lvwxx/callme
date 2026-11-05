@@ -246,6 +246,18 @@ impl Callme {
         Some(serde_json::to_string(&h).unwrap())
     }
 
+    /// `.http` text with request `index`'s JSON body pretty-printed; null when it has no body to format.
+    pub fn format_body(text: String, index: u32) -> Result<Option<String>, String> {
+        lang::format_body(&text, index as usize)
+    }
+
+    /// Where the `{{…}}` at `line`, UTF-16 `column` is defined, as JSON `{ file, line, start, end }`, or null.
+    pub fn definition(root: String, file: String, text: String, line: u32, column: u32, env: Option<String>) -> Option<String> {
+        let project = Project { root: root.into() };
+        let d = Service { project: &project, file: &file, text: &text, env }.definition(line as usize, column as usize)?;
+        Some(serde_json::to_string(&d).unwrap())
+    }
+
     /// The method and URL request `index` would be sent with, as JSON `{ method, url }` (secrets masked).
     pub fn preview(root: String, file: String, text: String, index: u32, env: Option<String>) -> Result<String, String> {
         let project = Project { root: root.into() };

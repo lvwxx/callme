@@ -37,6 +37,7 @@ export type Hover = {
   note?: string | null;
   definedIn?: string | null;
 };
+export type Definition = { file: string; line: number; start: number; end: number };
 export type EnvView = { envs: string[]; current?: string | null; env?: string | null; vars: { name: string; value: string; source: string }[] };
 export type Fold = { startLine: number; endLine: number };
 export type Span = { line: number; start: number; end: number };
@@ -80,6 +81,7 @@ export const api = {
   jsonFolds: (text: string): Fold[] => JSON.parse(Callme.jsonFolds(text)),
   variables: (text: string): Span[] => JSON.parse(Callme.variables(text)),
   requestAt: (text: string, line: number) => Callme.requestAt(text, line),
+  formatBody: (text: string, index: number): string | null => Callme.formatBody(text, index),
   requestLine: (text: string, index: number) => Callme.requestLine(text, index),
   diagnostics: (file: string, text: string, env?: string | null): Diagnostic[] => JSON.parse(Callme.diagnostics(root(), file, text, opt(env))),
   completions: (file: string, text: string, line: number, column: number, env?: string | null): CompletionItem[] =>
@@ -87,6 +89,10 @@ export const api = {
   hover(file: string, text: string, line: number, column: number, env?: string | null): Hover | null {
     const h = Callme.hover(root(), file, text, line, column, opt(env));
     return h ? JSON.parse(h) : null;
+  },
+  definition(file: string, text: string, line: number, column: number, env?: string | null): Definition | null {
+    const d = Callme.definition(root(), file, text, line, column, opt(env));
+    return d ? JSON.parse(d) : null;
   },
   preview(file: string, text: string, index: number, env?: string | null): { method: string; url: string } | ApiError {
     try {

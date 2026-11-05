@@ -4,7 +4,7 @@ import { computed, signal, Text, View, Scroll } from "nsh";
 import { Editor, Input } from "nsh/base";
 import { api } from "./api";
 import { Icon } from "./icons";
-import { addEnv, creatingEnv, env, envState, envTab, reloadEnv } from "./store";
+import { addEnv, creatingEnv, editor, env, envState, envTab, reloadEnv } from "./store";
 import { Button } from "./ui";
 import { Tabs } from "./ui";
 
@@ -85,6 +85,7 @@ export function EnvPane() {
           </If>
         </View>
         <Editor
+          ref={(r) => (editor.env = r)}
           value={value() || (envTab() === "public" ? TEMPLATE : '{\n  "dev": {}\n}\n')}
           onChange={({ value }) => edit(file(), value)}
           language="json"

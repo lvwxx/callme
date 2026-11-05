@@ -4,8 +4,8 @@ import { computed, Scroll, signal, Text, View } from "nsh";
 import { Editor, Input } from "nsh/base";
 import { api, type Run } from "./api";
 import { Icon } from "./icons";
-import { IconButton, Status, Tabs, Tip, size } from "./ui";
-import { currentRequest, currentRun, editor, notice, runs } from "./store";
+import { Button, IconButton, Status, Tabs, Tip, size } from "./ui";
+import { currentRequest, currentRun, editor, missingDependency, notice, runs, sendAfter } from "./store";
 
 type Tab = "body" | "headers" | "timing" | "history";
 const tab = signal<Tab>("body");
@@ -51,9 +51,14 @@ function Summary() {
       <If
         when={shown()}
         else={
-          <Text class={`flex-1 text-[13px] ${state()?.error ? "text-status-err" : "text-muted-foreground"}`} style={{ numberOfLines: 2 }}>
-            {state()?.error ? [state()!.error!.message, state()!.error!.hint].filter(Boolean).join("\n") : state()?.status ?? "按 ⌘↵ 发送当前请求"}
-          </Text>
+          <>
+            <Text class={`flex-1 text-[13px] ${state()?.error ? "text-status-err" : "text-muted-foreground"}`} style={{ numberOfLines: 2 }}>
+              {state()?.error ? [state()!.error!.message, state()!.error!.hint].filter(Boolean).join("\n") : state()?.status ?? "按 ⌘↵ 发送当前请求"}
+            </Text>
+            <If when={missingDependency(state()?.error?.message)}>
+              {(name) => <Button label={`先运行 ${name()}，再运行这个请求`} onPress={() => void sendAfter(name())} />}
+            </If>
+          </>
         }
       >
         {(r) => (
