@@ -11,8 +11,9 @@ server=$!
 while [ ! -s "$work/port" ]; do sleep 0.1; done
 port="$(cat "$work/port")"
 mkdir -p "$work/project/.callme"
-printf '{\n  "dev": {\n    "baseUrl": "http://127.0.0.1:%s"\n  },\n  "prod": {\n    "baseUrl": "https://api.example.invalid"\n  }\n}\n' "$port" > "$work/project/http-client.env.json"
+printf '{\n  "dev": {\n    "baseUrl": "http://127.0.0.1:%s",\n    "secret": "s"\n  },\n  "prod": {\n    "baseUrl": "https://api.example.invalid"\n  }\n}\n' "$port" > "$work/project/http-client.env.json"
 echo '{"env": "dev"}' > "$work/project/.callme/state.json"
+touch "$work/project/.gitignore"
 cat > "$work/project/api.http" <<'HTTP'
 ### 用户
 # @name me
@@ -30,6 +31,7 @@ GET {{baseUrl}}/who?id={{token.response.body.$.user.id}}
 ### 令牌
 # @name token
 GET {{baseUrl}}/token
+X-Secret: {{secret}}
 
 ### 创建：请求体写在一行里
 # @name create

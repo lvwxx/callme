@@ -4,7 +4,7 @@ import { computed, signal, Text, View, Scroll } from "nsh";
 import { Editor, Input } from "nsh/base";
 import { api } from "./api";
 import { Icon } from "./icons";
-import { addEnv, creatingEnv, editor, env, envState, envTab, reloadEnv } from "./store";
+import { addEnv, creatingEnv, editor, env, envState, envTab, reloadEnv, settled } from "./store";
 import { Button } from "./ui";
 import { Tabs } from "./ui";
 
@@ -38,6 +38,11 @@ const sourceLabel: Record<string, string> = { shared: "$shared", env: "环境", 
 export function EnvPane() {
   const file = () => FILES[envTab()];
   const value = () => texts()[file()] ?? read(file());
+  const settledValue = settled(value);
+  const problems = computed(() => {
+    void envState();
+    return api.envDiagnostics(file(), settledValue());
+  });
   const shownEnv = () => preview() ?? env() ?? envState().envs[0] ?? null;
   const view = computed(() => {
     void envState();
@@ -89,8 +94,25 @@ export function EnvPane() {
           value={value() || (envTab() === "public" ? TEMPLATE : '{\n  "dev": {}\n}\n')}
           onChange={({ value }) => edit(file(), value)}
           language="json"
+          diagnostics={problems().map((d) => ({
+            range: { start: { line: d.line, column: d.start }, end: { line: d.line, column: d.end } },
+            severity: d.severity,
+            message: d.message,
+          }))}
           class="flex-1"
         />
+        <If when={problems().length > 0}>
+          <View class="gap-1 border-t border-border bg-panel px-3 py-2">
+            <Each of={problems()}>
+              {(d) => (
+                <View class="flex-row items-center gap-2">
+                  <View class={`h-2 w-2 rounded-full ${d().severity === "error" ? "bg-destructive" : "bg-warning"}`} />
+                  <Text class="text-xs text-foreground">{`第 ${d().line + 1} 行：${d().message}`}</Text>
+                </View>
+              )}
+            </Each>
+          </View>
+        </If>
       </View>
       <View class="w-[500px] border-l border-border bg-panel">
         <View class="h-11 flex-row items-center gap-2.5 border-b border-border px-3">

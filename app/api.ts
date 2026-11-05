@@ -83,6 +83,9 @@ export const api = {
   requestAt: (text: string, line: number) => Callme.requestAt(text, line),
   formatBody: (text: string, index: number): string | null => Callme.formatBody(text, index),
   requestLine: (text: string, index: number) => Callme.requestLine(text, index),
+  gitignoreMissing: (): string[] => JSON.parse(Callme.gitignoreMissing(root())),
+  addToGitignore: (patterns: string[]) => Callme.addToGitignore(root(), patterns),
+  envDiagnostics: (file: string, text: string): Diagnostic[] => JSON.parse(Callme.envDiagnostics(root(), file, text)),
   diagnostics: (file: string, text: string, env?: string | null): Diagnostic[] => JSON.parse(Callme.diagnostics(root(), file, text, opt(env))),
   completions: (file: string, text: string, line: number, column: number, env?: string | null): CompletionItem[] =>
     JSON.parse(Callme.completions(root(), file, text, line, column, opt(env))),

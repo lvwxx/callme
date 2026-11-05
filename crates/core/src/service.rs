@@ -349,6 +349,73 @@ impl Service<'_> {
     }
 }
 
+/// Diagnostics of an environment file's text (`file` is `http-client.env.json` or the private one): JSON that does
+/// not parse, and — in the shared file — an environment missing a variable that another environment has and a
+/// request of the project uses.
+pub fn env_file_diagnostics(project: &Project, file: &str, text: &str) -> Vec<Diagnostic> {
+    let lines: Vec<&str> = text.split('\n').collect();
+    let width = |l: usize| lines.get(l).map_or(0, |s| s.encode_utf16().count());
+    if text.trim().is_empty() {
+        return vec![];
+    }
+    let value: serde_json::Value = match serde_json::from_str(text) {
+        Ok(v) => v,
+        Err(e) => {
+            let line = e.line().saturating_sub(1);
+            return vec![Diagnostic { line, start: 0, end: width(line), severity: Severity::Error, message: format!("不是合法的 JSON：{e}") }];
+        }
+    };
+    let Some(envs) = value.as_object() else {
+        return vec![Diagnostic { line: 0, start: 0, end: width(0), severity: Severity::Error, message: "顶层应该是对象，每个键是一个环境".into() }];
+    };
+    if file != PUBLIC_FILE {
+        return vec![];
+    }
+    // The variables the project's requests use.
+    let mut used: Vec<String> = Vec::new();
+    for f in project.http_files() {
+        if let Ok(t) = std::fs::read_to_string(project.root.join(&f)) {
+            for (_, _, expr) in lang::all_variables(&t) {
+                if !expr.starts_with('$') && !expr.contains(".response.") && !used.contains(&expr) {
+                    used.push(expr);
+                }
+            }
+        }
+    }
+    let private = project.env_files().ok();
+    let shared: Vec<&String> = envs.get("$shared").and_then(|v| v.as_object()).map(|m| m.keys().collect()).unwrap_or_default();
+    let mut out = Vec::new();
+    for (name, vars) in envs.iter().filter(|(n, _)| *n != "$shared") {
+        let Some(vars) = vars.as_object() else { continue };
+        let in_private = |var: &str| {
+            private.as_ref().and_then(|p| p.resolve(Some(name), &[]).ok()).is_some_and(|v| v.is_secret(var))
+        };
+        let mut missing: Vec<&str> = Vec::new();
+        for (other, other_vars) in envs.iter().filter(|(n, _)| *n != "$shared" && *n != name) {
+            let _ = other;
+            for k in other_vars.as_object().into_iter().flat_map(|m| m.keys()) {
+                if !vars.contains_key(k) && !shared.contains(&k) && used.contains(k) && !in_private(k) && !missing.contains(&k.as_str()) {
+                    missing.push(k);
+                }
+            }
+        }
+        if missing.is_empty() {
+            continue;
+        }
+        let key = format!("\"{name}\"");
+        let Some(line) = lines.iter().position(|l| l.contains(&key) && l[l.find(&key).unwrap() + key.len()..].trim_start().starts_with(':')) else { continue };
+        let col = lines[line].find(&key).unwrap();
+        out.push(Diagnostic {
+            line,
+            start: lang::utf16_col(lines[line], col),
+            end: lang::utf16_col(lines[line], col + key.len()),
+            severity: Severity::Warning,
+            message: format!("{name} 没有 {}：其他环境有，请求里也用到了", missing.join("、")),
+        });
+    }
+    out
+}
+
 /// An environment's variables, secrets masked.
 pub fn env_view(project: &Project, env: Option<&str>) -> Result<EnvView, Error> {
     let files = project.env_files()?;
@@ -475,6 +542,23 @@ mod tests {
             s.curl(1).unwrap(),
             "curl 'https://dev.x/a' \\\n  -H 'X-T: secret-123' \\\n  -H 'Content-Type: application/json' \\\n  --data-raw '{\"it'\\''s\": 1}' -L"
         );
+    }
+
+    #[test]
+    fn diagnoses_environment_files() {
+        let (_d, p) = project();
+        std::fs::write(p.root.join("me.http"), TEXT).unwrap();
+        let text = std::fs::read_to_string(p.root.join(PUBLIC_FILE)).unwrap();
+        let d = env_file_diagnostics(&p, PUBLIC_FILE, &text);
+        // prod lacks nothing the requests use but `token`, which dev has only privately.
+        assert!(d.is_empty(), "{d:?}");
+        let text = "{\n  \"dev\": { \"baseUrl\": \"a\", \"nope\": \"x\" },\n  \"prod\": { \"baseUrl\": \"b\" }\n}";
+        let d = env_file_diagnostics(&p, PUBLIC_FILE, text);
+        assert_eq!(d.len(), 1);
+        assert_eq!((d[0].line, d[0].start, d[0].end), (2, 2, 8));
+        assert!(d[0].message.contains("prod 没有 nope"));
+        let bad = env_file_diagnostics(&p, PRIVATE_FILE, "{\n  \"dev\": {,}\n}");
+        assert_eq!((bad[0].line, bad[0].severity), (1, Severity::Error));
     }
 
     #[test]

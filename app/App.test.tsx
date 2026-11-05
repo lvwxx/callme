@@ -46,7 +46,7 @@ test("switches the environment from the title bar", async () => {
   await app.waitFor("text:https://api.example.invalid/me", { timeout: 5_000 });
   await app.press("label:切换环境，当前 prod");
   await app.chooseMenuItem("dev");
-  await app.waitFor("text:环境 dev · 1 个变量", { timeout: 5_000 });
+  await app.waitFor("text:环境 dev · 2 个变量", { timeout: 5_000 });
 });
 
 test("reloads a file changed outside", async () => {
@@ -88,7 +88,7 @@ test("creates an environment", async () => {
   await app.keyboard.press("enter");
   await app.waitFor("text:staging", { timeout: 5_000 });
   const env = JSON.parse(Callme.read(Callme.root(), "http-client.env.json"));
-  expect(env.staging).toEqual({ baseUrl: "" });
+  expect(env.staging).toEqual({ baseUrl: "", secret: "" });
   await app.waitFor("label:切换环境，当前 staging", { timeout: 5_000 });
   // Back to dev for the tests after this one.
   await app.press("label:切换环境，当前 staging");
@@ -126,4 +126,18 @@ test("comments out a header and formats a JSON body", async () => {
   await app.keyboard.press("mod+shift+f");
   await app.waitFor('text:  "a": 1,', { timeout: 5_000 });
   await app.waitFor("text:    {{$uuid}}", { timeout: 5_000 });
+});
+
+test("offers to add secrets to .gitignore", async () => {
+  const app = await open("./App.tsx", { width: 1280, height: 800 });
+  await app.waitFor("text:.gitignore 里没有 .callme/、http-client.private.env.json：密钥和本地记录可能会被提交到 git", { timeout: 5_000 });
+  await app.press("label:加到 .gitignore");
+  expect(Callme.read(Callme.root(), ".gitignore")).toContain("http-client.private.env.json");
+});
+
+test("warns about an environment missing a variable", async () => {
+  const app = await open("./App.tsx", { width: 1280, height: 800 });
+  await app.press("label:http-client.env.json");
+  // The line depends on the tests before (a new environment rewrites the file).
+  await app.waitUntil(() => app.texts().some((t) => /^第 \d+ 行：prod 没有 secret：其他环境有，请求里也用到了$/.test(t)), { timeout: 5_000 });
 });

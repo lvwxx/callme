@@ -1,8 +1,8 @@
 // callme: a simple, AI-friendly API client for .http files. The title bar, the sidebar, the request and response
 // panes (or the environment view), a status bar, and the command palette over them.
-import { computed, effect, keymap, mount, Text, View } from "nsh";
+import { computed, effect, keymap, mount, signal, Text, View } from "nsh";
 import { isAvailable as hasWindow, Menu, Window } from "nsh/desktop";
-import { project } from "./api";
+import { api, project } from "./api";
 import { EnvPane } from "./EnvPane";
 import { Palette } from "./Palette";
 import { RequestPane } from "./RequestPane";
@@ -77,6 +77,27 @@ setInterval(checkExternalChanges, 1000);
 const first = requests()[0];
 if (first) selectRequest(first);
 
+/** A note when the project's .gitignore would let secrets or local state into git. */
+function GitignoreNote() {
+  const missing = signal<string[]>([]);
+  effect(() => {
+    if (project()) missing.set(api.gitignoreMissing());
+  });
+  return (
+    <If when={missing().length > 0}>
+      <View class="flex-row items-center gap-3 border-t border-warning bg-warning/10 px-3 py-1.5">
+        <Text class="flex-1 text-xs text-foreground">{`.gitignore 里没有 ${missing().join("、")}：密钥和本地记录可能会被提交到 git`}</Text>
+        <View role="button" accessibilityLabel="加到 .gitignore" onPress={() => (api.addToGitignore(missing()), missing.set([]), notice.set("已加到 .gitignore"))} class="rounded-md bg-button px-2.5 py-1 active:opacity-80">
+          <Text class="text-xs font-semibold text-button-foreground">加到 .gitignore</Text>
+        </View>
+        <View role="button" accessibilityLabel="忽略" onPress={() => missing.set([])} class="rounded-md px-2 py-1 hover:bg-list-hover">
+          <Text class="text-xs text-muted-foreground">忽略</Text>
+        </View>
+      </View>
+    </If>
+  );
+}
+
 function StatusBar() {
   const left = computed(() =>
     view() === "env" ? "环境变量" : activeFile() ? `${activeFile()} · 第 ${currentIndex() || "-"} 个请求` : project(),
@@ -123,6 +144,7 @@ function App() {
           </If>
         </View>
       </If>
+      <GitignoreNote />
       <StatusBar />
       <Palette />
     </View>

@@ -246,6 +246,42 @@ impl Callme {
         Some(serde_json::to_string(&h).unwrap())
     }
 
+    /// What the project's `.gitignore` lacks of `.callme/` and `http-client.private.env.json`, as JSON; empty
+    /// when the project is not in git (no `.git` up from it) and has no `.gitignore`.
+    pub fn gitignore_missing(root: String) -> String {
+        let root = PathBuf::from(root);
+        let in_git = root.ancestors().any(|d| d.join(".git").exists());
+        let path = root.join(".gitignore");
+        if !in_git && !path.exists() {
+            return "[]".into();
+        }
+        let text = std::fs::read_to_string(&path).unwrap_or_default();
+        let has = |p: &str| text.lines().any(|l| { let l = l.trim(); l == p || l == p.trim_end_matches('/') || l == format!("/{p}") });
+        let missing: Vec<&str> = [".callme/", callme_core::env::PRIVATE_FILE].into_iter().filter(|p| !has(p)).collect();
+        serde_json::to_string(&missing).unwrap()
+    }
+
+    /// Adds `patterns` to the project's `.gitignore` (created when missing).
+    pub fn add_to_gitignore(root: String, patterns: Vec<String>) -> Result<(), String> {
+        let path = PathBuf::from(root).join(".gitignore");
+        let mut text = std::fs::read_to_string(&path).unwrap_or_default();
+        if !text.is_empty() && !text.ends_with('\n') {
+            text.push('\n');
+        }
+        text.push_str("# callme\n");
+        for p in patterns {
+            text.push_str(&p);
+            text.push('\n');
+        }
+        std::fs::write(path, text).map_err(|e| e.to_string())
+    }
+
+    /// Diagnostics of environment file `file`'s text, as JSON `[{ line, start, end, severity, message }]`.
+    pub fn env_diagnostics(root: String, file: String, text: String) -> String {
+        let project = Project { root: root.into() };
+        serde_json::to_string(&service::env_file_diagnostics(&project, &file, &text)).unwrap()
+    }
+
     /// `.http` text with request `index`'s JSON body pretty-printed; null when it has no body to format.
     pub fn format_body(text: String, index: u32) -> Result<Option<String>, String> {
         lang::format_body(&text, index as usize)
