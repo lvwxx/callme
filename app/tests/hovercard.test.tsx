@@ -15,3 +15,15 @@ test("hover card", async () => {
   await app.wait(800);
   if (app.shows("text:响应引用")) throw new Error("card stayed after the mouse left");
 });
+
+test("the hover card's footer goes to the definition", async () => {
+  // Narrow enough that the middle of `X-Secret: {{secret}}` is on the variable.
+  const app = await open("../App.tsx", { width: 1070, height: 800 });
+  await app.wait(1000);
+  await app.press("label:GET 用户");
+  await app.wait(300);
+  await app.hover("text:X-Secret: {{secret}}");
+  await app.wait(1200);
+  await app.press("label:跳转到 http-client.env.json:4");
+  await app.waitFor("text:生效变量");
+});

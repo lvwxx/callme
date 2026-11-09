@@ -37,6 +37,13 @@ function showHover(value: ReturnType<typeof hover>) {
   clearTimeout(hideTimer);
   hover.set(value);
 }
+/** Goes to `file:line` (1-based), where the hovered variable is defined, and closes the card. */
+function jumpTo(definedIn: string) {
+  const at = definedIn.lastIndexOf(":");
+  overCard = false;
+  showHover(null);
+  goTo(definedIn.slice(0, at), Math.max(0, Number(definedIn.slice(at + 1)) - 1));
+}
 function hideHoverSoon() {
   clearTimeout(hideTimer);
   hideTimer = setTimeout(() => {
@@ -219,9 +226,14 @@ function HoverCard() {
             </View>
           </If>
           <If when={d().definedIn}>
-            <View class="flex-row justify-between border-t border-border px-3 py-1.5">
+            <View
+              role="button"
+              accessibilityLabel={`跳转到 ${d().definedIn}`}
+              onPress={() => jumpTo(d().definedIn!)}
+              class="flex-row justify-between rounded-b-lg border-t border-border px-3 py-1.5 hover:bg-list-hover"
+            >
               <Text class="font-mono text-[11px] text-muted-foreground">{d().definedIn!}</Text>
-              <Text class="text-[11px] text-muted-foreground">⌘ 点击跳转</Text>
+              <Text class="text-[11px] text-brand">跳转 · 或 ⌘ 点击变量</Text>
             </View>
           </If>
           </>
