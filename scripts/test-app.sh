@@ -40,4 +40,6 @@ POST {{baseUrl}}/create
 {"a":1,"b":[true,{{$uuid}}]}
 HTTP
 cd "$here/app"
-CALLME_PROJECT="$work/project" nsh test "$@"
+# The tests keep their own recent projects: the user's ~/.callme stays as it was.
+mkdir -p "$work/home"
+CALLME_HOME="$work/home" CALLME_PROJECT="$work/project" nsh test "$@"

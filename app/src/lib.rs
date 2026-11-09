@@ -122,8 +122,13 @@ impl Watcher for Forward {
     }
 }
 
+/// `~/.callme/last-project`; `$CALLME_HOME` stands for `~/.callme` (the GUI tests' own, so their throwaway
+/// projects stay out of the user's recent ones).
 fn last_project_file() -> Option<PathBuf> {
-    std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".callme").join("last-project"))
+    let dir = std::env::var_os("CALLME_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".callme")))?;
+    Some(dir.join("last-project"))
 }
 
 fn recent_projects() -> Vec<String> {
@@ -160,11 +165,15 @@ pub struct Callme;
 #[module]
 impl Callme {
     /// The project to open: `$CALLME_PROJECT`, else the one opened last (`~/.callme/last-project`, which
-    /// `callme open` writes too), else the working directory unless it is `/` (an app opened from the Finder);
+    /// `callme open` writes too) or the newest recent one still there, else the working directory unless it is `/` (an app opened from the Finder);
     /// looking upward for `http-client.env.json` or `.callme/`. Empty when there is none.
     pub fn root() -> String {
         let from_env = std::env::var_os("CALLME_PROJECT").map(PathBuf::from);
-        let last = last_project().filter(|p| p.is_dir());
+        // The last one, else the newest of the recent ones still there (the last one was moved or deleted).
+        let last = last_project()
+            .into_iter()
+            .chain(recent_projects().into_iter().map(PathBuf::from))
+            .find(|p| p.is_dir());
         let cwd = std::env::current_dir().ok().filter(|d| d.parent().is_some());
         match from_env.or(last).or(cwd) {
             Some(start) => Project::discover(&start).root.display().to_string(),
@@ -180,7 +189,7 @@ impl Callme {
         }
         let _ = std::fs::write(&file, &root);
         let mut recent = recent_projects();
-        recent.retain(|p| *p != root);
+        recent.retain(|p| *p != root && std::path::Path::new(p).is_dir());
         recent.insert(0, root);
         recent.truncate(8);
         let _ = std::fs::write(file.with_file_name("recent-projects.json"), serde_json::to_string_pretty(&recent).unwrap());

@@ -236,8 +236,12 @@ fn dispatch(cmd: Cmd, project: &Project, json: bool) -> Result<u8, Error> {
                 None => project.root.clone(),
             };
             let root = Project::discover(&start).root;
-            let home = std::env::var_os("HOME").map(PathBuf::from).ok_or_else(|| Error::Usage("没有 HOME 环境变量".into()))?;
-            let file = home.join(".callme").join("last-project");
+            // `$CALLME_HOME` stands for `~/.callme`, as in the app.
+            let dir = match std::env::var_os("CALLME_HOME") {
+                Some(d) => PathBuf::from(d),
+                None => std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".callme")).ok_or_else(|| Error::Usage("没有 HOME 环境变量".into()))?,
+            };
+            let file = dir.join("last-project");
             std::fs::create_dir_all(file.parent().unwrap()).map_err(|e| Error::Io(file.display().to_string(), e))?;
             std::fs::write(&file, root.display().to_string()).map_err(|e| Error::Io(file.display().to_string(), e))?;
             // By bundle id, else by name (an app LaunchServices has not registered yet).
