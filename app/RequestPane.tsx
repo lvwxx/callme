@@ -30,6 +30,20 @@ import { Button, Divider, IconButton, Method, SendButton } from "./ui";
 
 const hover = signal<{ data: Hover | null; anchor: Bounds; messages: string[] } | null>(null);
 
+// The card stays a moment after the mouse leaves the word, long enough to reach it, and while the mouse is over it.
+let hideTimer: ReturnType<typeof setTimeout> | undefined;
+let overCard = false;
+function showHover(value: ReturnType<typeof hover>) {
+  clearTimeout(hideTimer);
+  hover.set(value);
+}
+function hideHoverSoon() {
+  clearTimeout(hideTimer);
+  hideTimer = setTimeout(() => {
+    if (!overCard) hover.set(null);
+  }, 300);
+}
+
 const diagnostics = computed(() => (activeFile() ? api.diagnostics(activeFile(), settledText(), env()) : []));
 
 const editorDiagnostics = computed<EditorDiagnostic[]>(() =>
@@ -159,7 +173,17 @@ function HoverCard() {
   return (
     <If when={hover()}>
       {(h) => (
-        <Overlay anchor={h().anchor} placement="bottom" align="start" offset={4} class="w-[420px] rounded-lg border border-border bg-popover">
+        <Overlay
+          anchor={h().anchor}
+          placement="bottom"
+          align="start"
+          offset={4}
+          onMouseEnter={() => (clearTimeout(hideTimer), (overCard = true))}
+          onMouseLeave={() => ((overCard = false), hideHoverSoon())}
+          onCancel={() => ((overCard = false), showHover(null))}
+          class="w-[420px] rounded-lg border border-border bg-popover"
+        >
+          <View selectable>
           <If when={h().data}>
           {(d) => (
           <>
@@ -208,6 +232,7 @@ function HoverCard() {
               <Each of={h().messages}>{(m) => <Text class="text-xs text-warning">{m()}</Text>}</Each>
             </View>
           </If>
+          </View>
         </Overlay>
       )}
     </If>
@@ -239,9 +264,10 @@ export function RequestPane() {
           onHover={(e) => {
             const data = api.hover(activeFile(), text(), e.position.line, e.position.column, env());
             const messages = e.diagnostics.map((d) => d.message);
-            hover.set(data || messages.length ? { data, anchor: e.pageBounds, messages } : null);
+            if (data || messages.length) showHover({ data, anchor: e.pageBounds, messages });
+            else hideHoverSoon();
           }}
-          onHoverEnd={() => hover.set(null)}
+          onHoverEnd={hideHoverSoon}
           onDefinitionRequest={(e) => {
             const d = api.definition(activeFile(), text(), e.position.line, e.position.column, env());
             if (!d) return;
@@ -249,7 +275,8 @@ export function RequestPane() {
               const line = e.position.line;
               editor.ref?.presentDefinitionLink(e.id, { start: { line, column: d.start }, end: { line, column: d.end } });
             } else {
-              hover.set(null);
+              overCard = false;
+              showHover(null);
               goTo(d.file, d.line);
             }
           }}
