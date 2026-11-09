@@ -230,7 +230,7 @@ function HoverCard() {
               role="button"
               accessibilityLabel={`跳转到 ${d().definedIn}`}
               onPress={() => jumpTo(d().definedIn!)}
-              class="flex-row justify-between rounded-b-lg border-t border-border px-3 py-1.5 hover:bg-list-hover"
+              class="cursor-pointer flex-row justify-between rounded-b-lg border-t border-border px-3 py-1.5 hover:bg-list-hover"
             >
               <Text class="font-mono text-[11px] text-muted-foreground">{d().definedIn!}</Text>
               <Text class="text-[11px] text-brand">跳转 · 或 ⌘ 点击变量</Text>
