@@ -124,8 +124,6 @@ cd app && nsh run --target macos           # run the app (CALLME_PROJECT=<dir> p
 cd app && nsh package --target macos       # build callme.app
 ```
 
-Try it on the demo project: `callme open examples/demo`.
-
 The layout: `crates/core` parses, resolves and runs requests (everything the app, the CLI and MCP share),
 `crates/cli` is the `callme` command and the MCP server, `app/` is the desktop app (TSX on a Rust crate). The design:
 [docs/superpowers/specs/2026-11-04-callme-design.md](docs/superpowers/specs/2026-11-04-callme-design.md) (Chinese).

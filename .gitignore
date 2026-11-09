@@ -2,4 +2,5 @@
 .callme/
 http-client.private.env.json
 .DS_Store
-examples/demo/.callme/
+# Local projects to try callme on: not part of the repository.
+examples/

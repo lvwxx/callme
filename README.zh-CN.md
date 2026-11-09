@@ -86,6 +86,4 @@ cd app && nsh run --target macos           # 运行桌面版（CALLME_PROJECT=�
 cd app && nsh package --target macos       # 打包成 .app
 ```
 
-示例项目在 `examples/demo`：`callme open examples/demo`。
-
 设计文档：`docs/superpowers/specs/2026-11-04-callme-design.md`。
